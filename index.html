@@ -430,6 +430,123 @@ loop(dt=>{
 });
 `;
 
+/* ---------- Neon Rush: pseudo-3D time-trial racer ---------- */
+const RACER = String.raw`
+const SEG=200,RW=2000,DRAW=200,CAMH=1000,depth=1/Math.tan(50*Math.PI/180),RUMB=3,LAPS=3;
+const COL={light:{road:'#4b3b7a',grass:'#1d1140',rumble:'#f472b6',lane:'#e9d5ff'},dark:{road:'#433570',grass:'#170d34',rumble:'#22d3ee',lane:null}};
+let segs=[],trackLen=0;
+function lastY(){return segs.length?segs[segs.length-1].p2.y:0;}
+function add(c,y){const n=segs.length;segs.push({i:n,c:c,p1:{x:0,y:lastY(),z:n*SEG},p2:{x:0,y:y,z:(n+1)*SEG},spr:[],clip:0,col:Math.floor(n/RUMB)%2?COL.dark:COL.light});}
+function ease(a,b,p){return a+(b-a)*(-Math.cos(p*Math.PI)/2+.5);}
+function road(en,ho,le,c,h){const sy=lastY(),ey=sy+h*SEG*.5,t=en+ho+le;let k=0;
+  for(let n=0;n<en;n++)add(ease(0,c,n/en),ease(sy,ey,k++/t));
+  for(let n=0;n<ho;n++)add(c,ease(sy,ey,k++/t));
+  for(let n=0;n<le;n++)add(ease(c,0,n/le),ease(sy,ey,k++/t));}
+[[50,50,50,0,0],[40,60,40,-4,20],[30,40,30,0,-30],[50,80,50,5,40],[25,50,25,-6,0],[25,50,25,6,-40],
+ [40,40,40,0,60],[30,60,30,-3,-30],[50,50,50,4,0],[20,40,20,-6,20],[40,40,40,0,-40]].forEach(r=>road(r[0],r[1],r[2],r[3],r[4]));
+road(40,40,40,0,-lastY()/(SEG*.5));
+trackLen=segs.length*SEG;
+for(let n=20;n<segs.length;n+=8){segs[n].spr.push({off:-1.25,k:'cone'});segs[n].spr.push({off:1.25,k:'cone'});}
+for(let n=10;n<segs.length;n+=17)segs[n].spr.push({off:(n%34?-1:1)*(1.8+((n*7)%10)/5),k:'pylon'});
+for(let n=150;n<segs.length-60;n+=55+((n*13)%40))segs[n].spr.push({off:[-.6,0,.6][n%3],k:'block'});
+segs[4].spr.push({off:0,k:'gate'});
+
+const MAX=SEG*60,ACC=MAX/5,BRK=-MAX,DEC=-MAX/5,OFFD=-MAX/2,OFFL=MAX/4,CENT=.3,playerZ=CAMH*depth;
+let pos=0,px=0,speed=0,state='ready',count=3,goT=0,lap=1,lapT=0,laps=[],bestLap=null,bestTotal=null,total=0,overT=0,sky=0,shake=0,steerV=0,touches={};
+try{const b=parseFloat(localStorage.getItem('neonrush_best'));if(b>0)bestTotal=b;}catch(e){}
+function seg(z){return segs[Math.floor(z/SEG)%segs.length];}
+function fmt(t){const m=Math.floor(t/60),s=t-m*60;return m+':'+(s<10?'0':'')+s.toFixed(2);}
+function reset(){pos=0;px=0;speed=0;lap=1;laps=[];lapT=0;shake=0;state='count';count=3;}
+function finish(){state='over';overT=0;total=laps.reduce((a,b)=>a+b,0);
+  if(bestTotal===null||total<bestTotal){bestTotal=total;try{localStorage.setItem('neonrush_best',String(total));}catch(e){}}}
+
+/* ----- input: hold left/right half to steer, hold both sides to brake ----- */
+function onTap(e){if(state==='ready'){state='count';count=3;return;}if(state==='over'){if(overT>1)reset();return;}touches[e.pointerId]={x:e.clientX,y:e.clientY};}
+function onMove(e){const t=touches[e.pointerId];if(t){t.x=e.clientX;t.y=e.clientY;}}
+function onUp(e){delete touches[e.pointerId];}
+function onKey(e){if(e.key===' '||e.key==='Enter'){if(state==='ready'){state='count';count=3;}else if(state==='over'&&overT>1)reset();}}
+function inputs(){let l=false,r=false;for(const k in touches){if(touches[k].x<W/2)l=true;else r=true;}let s=l&&r?0:l?-1:r?1:0,b=l&&r;
+  if(K.ArrowLeft||K.a)s-=1;if(K.ArrowRight||K.d)s+=1;if(K.ArrowDown||K.s)b=true;return [Math.max(-1,Math.min(1,s)),b];}
+
+function update(dt){
+  const inp=inputs();steerV+=(inp[0]-steerV)*Math.min(1,dt*10);shake=Math.max(0,shake-dt);goT=Math.max(0,goT-dt);
+  if(state==='count'){count-=dt;if(count<=0){state='race';lapT=0;goT=.8;}return;}
+  if(state==='over'){overT+=dt;speed=Math.max(0,speed+DEC*dt);pos=(pos+dt*speed)%trackLen;return;}
+  if(state!=='race')return;
+  const ps=seg(pos+playerZ),pct=speed/MAX,old=pos;
+  pos=(pos+dt*speed)%trackLen;lapT+=dt;
+  if(pos<old){laps.push(lapT);if(bestLap===null||lapT<bestLap)bestLap=lapT;lapT=0;lap++;if(lap>LAPS){lap=LAPS;finish();return;}}
+  const dxs=dt*2.2*pct;px+=steerV*dxs;px-=dxs*pct*ps.c*CENT;
+  speed+=(inp[1]?BRK:ACC)*dt;
+  if(Math.abs(px)>1&&speed>OFFL)speed+=OFFD*dt;
+  const s0=seg(old+playerZ);
+  for(const s of s0===ps?[ps]:[s0,ps])for(const sp of s.spr){if(sp.k==='gate')continue;const w=sp.k==='block'?.35:sp.k==='cone'?.1:.13;
+    if(Math.abs(px-sp.off)<(.38+w)/2){speed=Math.min(speed,MAX/5);shake=.4;px+=(px>sp.off?1:-1)*.06;}}
+  px=Math.max(-2.2,Math.min(2.2,px));speed=Math.max(0,Math.min(MAX,speed));
+  sky+=ps.c*pct*dt*40;}
+
+/* ----- drawing ----- */
+function proj(p,cx,cy,cz){const X=p.x-cx,Y=p.y-cy,Z=p.z-cz;p.cz=Z;p.sc=depth/Z;p.sx=W/2+p.sc*X*W/2;p.sy=H/2-p.sc*Y*H/2;p.sw=p.sc*RW*W/2;}
+function poly(a,b,c,d,e,f,g,h,col){x.fillStyle=col;x.beginPath();x.moveTo(a,b);x.lineTo(c,d);x.lineTo(e,f);x.lineTo(g,h);x.closePath();x.fill();}
+function drawSeg(s,fog){const a=s.p1,b=s.p2,r1=a.sw/6,r2=b.sw/6,c=s.col;
+  x.fillStyle=c.grass;x.fillRect(0,b.sy,W,a.sy-b.sy+1);
+  poly(a.sx-a.sw-r1,a.sy,a.sx-a.sw,a.sy,b.sx-b.sw,b.sy,b.sx-b.sw-r2,b.sy,c.rumble);
+  poly(a.sx+a.sw+r1,a.sy,a.sx+a.sw,a.sy,b.sx+b.sw,b.sy,b.sx+b.sw+r2,b.sy,c.rumble);
+  poly(a.sx-a.sw,a.sy,a.sx+a.sw,a.sy,b.sx+b.sw,b.sy,b.sx-b.sw,b.sy,s.i<3?(s.i%2?'#e2e8f0':'#1e1b4b'):c.road);
+  if(c.lane){const l1=a.sw/32,l2=b.sw/32;for(const f of [-1/3,1/3]){const o1=a.sw*f,o2=b.sw*f;poly(a.sx+o1-l1,a.sy,a.sx+o1+l1,a.sy,b.sx+o2+l2,b.sy,b.sx+o2-l2,b.sy,c.lane);}}
+  if(fog>.35){x.fillStyle='rgba(30,14,60,'+Math.min(.85,(fog-.35)*1.6)+')';x.fillRect(0,b.sy,W,a.sy-b.sy+1);}}
+function drawSpr(s,sp){const sc=s.p1.sc,sx=s.p1.sx+sc*sp.off*RW*W/2,sy=s.p1.sy,u=sc*W/2;
+  x.save();x.beginPath();x.rect(0,0,W,s.clip);x.clip();
+  if(sp.k==='cone'){const w=180*u,h=260*u;x.fillStyle='#fb923c';x.beginPath();x.moveTo(sx,sy-h);x.lineTo(sx+w/2,sy);x.lineTo(sx-w/2,sy);x.fill();x.fillStyle='#fff';x.fillRect(sx-w*.3,sy-h*.45,w*.6,h*.12);}
+  else if(sp.k==='pylon'){const w=260*u,h=1400*u;x.globalAlpha=.85;x.fillStyle='#22d3ee';x.fillRect(sx-w/2,sy-h,w,h);x.fillStyle='#f0abfc';x.fillRect(sx-w/2,sy-h,w,h*.08);x.globalAlpha=1;}
+  else if(sp.k==='block'){const w=700*u,h=420*u;x.fillStyle='#e11d48';x.fillRect(sx-w/2,sy-h,w,h);x.fillStyle='#fde047';for(let i=0;i<4;i++)x.fillRect(sx-w/2+i*w/4+w/16,sy-h*.65,w/8,h*.3);}
+  else if(sp.k==='gate'){const w=s.p1.sw*2.5,h=1500*u,t=150*u;x.fillStyle='#a78bfa';x.fillRect(sx-w/2,sy-h,t,h);x.fillRect(sx+w/2-t,sy-h,t,h);x.fillRect(sx-w/2,sy-h,w,t*1.8);
+    if(t>3){x.fillStyle='#fff';x.font='800 '+Math.round(t*1.2)+'px system-ui';x.textAlign='center';x.textBaseline='middle';x.fillText('START / FINISH',sx,sy-h+t*.9);}}
+  x.restore();}
+function mts(off,base,hh,col,k){const st=W/5,sh=Math.floor(off/st),fr=off-sh*st;x.fillStyle=col;x.beginPath();x.moveTo(-st,H);x.lineTo(-st,base);
+  for(let i=-1;i<8;i++){const id=i+sh,hv=Math.abs(Math.sin(id*12.9898+k)*43758.5453)%1,p=i*st-fr;x.lineTo(p,base);x.lineTo(p+st/2,base-hh*(.4+hv*.6));}
+  x.lineTo(W+st,base);x.lineTo(W+st,H);x.closePath();x.fill();}
+function car(){const s=Math.min(W,H)/700,bob=(speed>0?Math.sin(performance.now()/60)*speed/MAX*1.5:0)+(Math.abs(px)>1?Math.sin(performance.now()/30)*3*speed/MAX:0)+(shake>0?Math.sin(performance.now()/20)*6:0);
+  x.save();x.translate(W/2+steerV*12*s,H-H*.07+bob);x.rotate(steerV*.05);x.scale(s,s);
+  x.fillStyle='rgba(0,0,0,.4)';x.beginPath();x.ellipse(0,10,130,18,0,0,7);x.fill();
+  x.fillStyle='#0b0b12';x.fillRect(-116,-30,36,42);x.fillRect(80,-30,36,42);
+  poly(-124,-6,124,-6,108,-62,-108,-62,'#f43f5e');
+  poly(-108,-62,108,-62,72,-104,-72,-104,'#be123c');
+  poly(-62,-68,62,-68,50,-96,-50,-96,'#1e1b4b');
+  x.fillStyle=inputs()[1]?'#ff2d55':'#fb7185';x.fillRect(-104,-50,42,13);x.fillRect(62,-50,42,13);
+  x.fillStyle='#22d3ee';x.fillRect(-114,-114,228,10);x.fillRect(-90,-106,10,10);x.fillRect(80,-106,10,10);
+  x.restore();}
+function hud(){const kmh=Math.round(speed/MAX*240);
+  x.fillStyle='rgba(11,13,20,.55)';x.fillRect(12,12,190,86);x.fillRect(W-202,12,190,86);
+  x.fillStyle='#e2e8f0';x.textBaseline='top';x.textAlign='left';x.font='800 26px system-ui';x.fillText(kmh+' km/h',24,20);
+  x.font='600 13px system-ui';x.fillStyle='#c4b5fd';x.fillText('Lap '+lap+' / '+LAPS,24,54);x.fillText('Time '+fmt(lapT),24,72);
+  x.textAlign='right';x.fillStyle='#a5f3fc';x.fillText('Best lap '+(bestLap===null?'—':fmt(bestLap)),W-24,22);
+  x.fillText('Best race '+(bestTotal===null?'—':fmt(bestTotal)),W-24,42);
+  laps.forEach((t,i)=>{x.fillStyle='#94a3b8';x.fillText('L'+(i+1)+' '+fmt(t),W-24,62+i*14);});
+  if(state==='race'||state==='count'){x.globalAlpha=.18;x.fillStyle='#fff';
+    x.beginPath();x.moveTo(30,H*.55);x.lineTo(70,H*.5);x.lineTo(70,H*.6);x.fill();x.beginPath();x.moveTo(W-30,H*.55);x.lineTo(W-70,H*.5);x.lineTo(W-70,H*.6);x.fill();
+    x.globalAlpha=1;}}
+function render(){
+  const base=seg(pos),bp=(pos%SEG)/SEG,ps=seg(pos+playerZ),pp=((pos+playerZ)%SEG)/SEG,py=ps.p1.y+(ps.p2.y-ps.p1.y)*pp;
+  const g=x.createLinearGradient(0,0,0,H/2);g.addColorStop(0,'#0c0420');g.addColorStop(1,'#6d28d9');x.fillStyle=g;x.fillRect(0,0,W,H/2+2);
+  x.fillStyle='rgba(244,114,182,.6)';x.beginPath();x.arc(W/2-sky*.2%W,H*.47,Math.min(W,H)*.14,Math.PI,0);x.fill();
+  mts(sky*.5,H/2+1,H*.2,'#3b1a6b',1);mts(sky,H/2+1,H*.12,'#26104a',7);
+  let maxy=H,xx=0,dx=-(base.c*bp);
+  for(let n=0;n<DRAW;n++){const s=segs[(base.i+n)%segs.length],lp=s.i<base.i?trackLen:0;
+    proj(s.p1,px*RW-xx,py+CAMH,pos-lp);proj(s.p2,px*RW-xx-dx,py+CAMH,pos-lp);xx+=dx;dx+=s.c;s.clip=maxy;
+    if(s.p1.cz<=depth||s.p2.sy>=s.p1.sy||s.p2.sy>=maxy)continue;
+    drawSeg(s,n/DRAW);maxy=s.p2.sy;}
+  for(let n=DRAW-1;n>0;n--){const s=segs[(base.i+n)%segs.length];if(s.p1.cz<=depth)continue;for(const sp of s.spr)drawSpr(s,sp);}
+  car();hud();
+  if(state==='ready'){label('NEON RUSH',H*.22,46,'#f0abfc');label('3-lap time trial — beat your best race',H*.22+44,16);
+    label('Hold left / right side to steer · hold both sides to brake · ← → ↓ on keyboard',H*.22+70,13,'#c4b5fd');label('Tap to start',H*.22+100,16,'#94a3b8');}
+  if(state==='count')label(String(Math.ceil(count)),H*.32,80,'#fde047');
+  if(goT>0)label('GO!',H*.32,80,'#4ade80');
+  if(state==='over'){label('FINISH!',H*.24,48,'#4ade80');label('Race time '+fmt(total)+(total===bestTotal?'  ·  NEW BEST!':''),H*.24+46,18);
+    if(overT>1)label('Tap to race again',H*.24+76,16,'#94a3b8');}}
+loop(dt=>{update(dt);render();});
+`;
+
 /* ---------- Bow Duel: real-time ragdoll archery vs CPU ---------- */
 const ARCHERY = String.raw`
 const DT=1/120;
@@ -654,6 +771,7 @@ const ICONS  = { All: '✨', Action: '⚡', Arcade: '👾', Retro: '📼', Racin
 const GAMES = [
   { title: 'Bow Duel',      genre: 'Action', hot: true, desc: 'Real-time ragdoll archery vs the CPU. Recoil, jumps, disarms, bomb arrows and headshots.', color: 'from-orange-500 to-red-700', emoji: '🏹', srcdoc: shell(ARCHERY) },
   { title: 'Downhill Dash', genre: 'Action', hot: true, desc: 'Roll a glowing ball down an endless neon track. Dodge gaps and blocks as the speed climbs.', color: 'from-violet-600 to-fuchsia-700', emoji: '🔮', srcdoc: shell(DOWNHILL) },
+  { title: 'Neon Rush',     genre: 'Racing', hot: true, desc: 'Low-poly 3-lap time trial through neon hills and hairpins. Beat your best race time.', color: 'from-orange-500 to-pink-700', emoji: '🏎️', srcdoc: shell(RACER) },
   { title: 'Space Blaster', genre: 'Action', hot: true, desc: 'Drag to fly, auto-fire lasers and survive endless waves of space rocks.', color: 'from-sky-500 to-indigo-700', emoji: '🚀', srcdoc: shell(BLASTER) },
   { title: 'Sky Hopper',    genre: 'Arcade', hot: true, desc: 'Tap to flap through the gaps. One touch, infinite rage.', color: 'from-cyan-500 to-blue-700', emoji: '🐤', srcdoc: shell(SKYHOP) },
   { title: 'Stack Tower',   genre: 'Arcade', desc: 'Drop sliding blocks to build the tallest tower. Miss and it shrinks.', color: 'from-amber-500 to-rose-600', emoji: '🏗️', srcdoc: shell(STACK) },
@@ -664,14 +782,6 @@ const GAMES = [
   /* ---- Open-source games, hosted in your repo (see the games/ folder guide) ---- */
   { title: 'Classic Pool',      genre: 'Sports',   source: 'open-source', desc: '8-ball pool vs an AI opponent. Open source (MIT) by Chen Shmilovich.', color: 'from-green-600 to-emerald-900', emoji: '🎱', url: 'games/classic-pool/index.html' },
 
-  /* ---- Commercial games: official embeds only ----
-     Paste ONLY the src="..." value from the developer's/publisher's official embed code.
-     Until a real embed URL is set, the card shows a "link needed" message instead of loading anything. */
-  { title: 'PolyTrack',         genre: 'Racing',   source: 'embed', desc: 'Low-poly time-trial racing. Official embed from the developer.', color: 'from-orange-500 to-amber-700', emoji: '🏎️', embed: 'https://itch.io/embed-upload/10314050?color=333333' },
-  { title: 'Slope',             genre: 'Action',   source: 'embed', desc: 'Roll down an endless slope. Official publisher embed.', color: 'from-green-500 to-slate-900', emoji: '🟢', embed: 'https://www.y8.com/embed/slope' },
-  { title: 'Ragdoll Archers',   genre: 'Action',   source: 'embed', desc: 'Physics archery duels. Official publisher embed.', color: 'from-yellow-600 to-red-800', emoji: '🎯', embed: 'https://www.crazygames.com/embed/ragdoll-archers',
-    // CrazyGames refuses to be framed on other sites, so this card skips the player and opens their page directly.
-    newTab: true, page: 'https://www.crazygames.com/game/ragdoll-archers' },
 ];
 
 /* ------------------------------------------------------------
