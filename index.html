@@ -782,6 +782,14 @@ const GAMES = [
   /* ---- Open-source games, hosted in your repo (see the games/ folder guide) ---- */
   { title: 'Classic Pool',      genre: 'Sports',   source: 'open-source', desc: '8-ball pool vs an AI opponent. Open source (MIT) by Chen Shmilovich.', color: 'from-green-600 to-emerald-900', emoji: '🎱', url: 'games/classic-pool/index.html' },
 
+  /* ---- Commercial games: official publisher embeds only ----
+     These load from itch.io / y8 / CrazyGames, so school networks that block those sites will block them too. */
+  { title: 'PolyTrack',         genre: 'Racing',   source: 'embed', desc: 'Low-poly time-trial racing. Official embed — may be blocked on school networks.', color: 'from-orange-500 to-amber-700', emoji: '🏁', embed: 'https://itch.io/embed-upload/10314050?color=333333' },
+  { title: 'Slope',             genre: 'Action',   source: 'embed', desc: 'Roll down an endless slope. Official embed — may be blocked on school networks.', color: 'from-green-500 to-slate-900', emoji: '🟢', embed: 'https://www.y8.com/embed/slope' },
+  { title: 'Ragdoll Archers',   genre: 'Action',   source: 'embed', desc: 'Physics archery duels. Opens on CrazyGames — may be blocked on school networks.', color: 'from-yellow-600 to-red-800', emoji: '🎯', embed: 'https://www.crazygames.com/embed/ragdoll-archers',
+    // CrazyGames refuses to be framed on other sites, so this card skips the player and opens their page directly.
+    newTab: true, page: 'https://www.crazygames.com/game/ragdoll-archers' },
+
 ];
 
 /* ------------------------------------------------------------
@@ -804,7 +812,7 @@ function renderGrid() {
       <div class="relative aspect-[4/3] overflow-hidden">
         <div class="thumb absolute inset-0 bg-gradient-to-br ${g.color} grid place-items-center text-7xl">${g.emoji}</div>
         <span class="absolute top-3 left-3 text-xs font-semibold px-2 py-1 rounded-md bg-black/40 backdrop-blur">${g.genre}</span>
-        ${g.source ? `<span class="absolute bottom-3 left-3 text-[11px] font-semibold px-2 py-1 rounded-md bg-black/50 backdrop-blur">${g.source === 'open-source' ? '🔓 Open source' : '🔗 Official embed'}</span>` : ''}
+        ${g.source ? `<span class="absolute bottom-3 left-3 text-[11px] font-semibold px-2 py-1 rounded-md bg-black/50 backdrop-blur">${g.source === 'open-source' ? '🔓 Open source' : '⚠️ May be blocked at school'}</span>` : ''}
         ${g.hot ? '<span class="absolute top-3 right-3 text-xs font-semibold px-2 py-1 rounded-md bg-rose-500/90">🔥 Popular</span>' : ''}
         <div class="overlay absolute inset-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col justify-end p-4">
           <p class="desc text-sm text-slate-200 mb-3">${g.desc}</p>
