@@ -22,6 +22,7 @@
     <link rel="stylesheet" type="text/css" href="css/game-layout.css"/>
     <link rel="shortcut icon" type="image/png" href="assets/sprites/favicon.png"/>
     <script src="script/lib/LAB.min.js"></script>
+    <script src="script/touch-ui.js"></script>
     <script>
         $LAB
                 .script('script/system/Keys.js').wait()
@@ -48,6 +49,7 @@
                 .script('script/Game.js').wait()
                 .script('script/Assets.js').wait(function () {
                     Game.start('gameArea','screen', 1500, 825);
+                    initTouchUI();
                 });
 
     </script>
