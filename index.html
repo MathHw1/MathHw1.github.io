@@ -90,7 +90,7 @@
     <div class="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-b border-white/5 shrink-0">
       <p id="playerTitle" class="font-semibold truncate"></p>
       <div class="flex gap-2 shrink-0">
-        <button id="tabBtn" class="hidden px-3 py-2 text-sm rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold transition" title="Open in new tab">🚀 <span class="hidden sm:inline">Open in New Tab / Fix White Screen</span></button>
+        <button id="tabBtn" class="hidden px-3 py-2 text-sm rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold transition" title="Open in new tab">🚀 <span class="hidden sm:inline">Open in New Tab</span></button>
         <button id="panicBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 transition" title="Study mode">📄</button>
         <button id="fsBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 transition">⛶ <span class="hidden sm:inline">Fullscreen</span></button>
         <button id="closeBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-rose-500/80 transition">✕ <span class="hidden sm:inline">Close</span></button>
@@ -192,13 +192,19 @@ $('grid').addEventListener('click', e => {
   const card = e.target.closest('[data-play]');
   if (!card) return;
   const g = GAMES[card.dataset.play];
-  if (g.newTab) { openInNewTab(g); return; }
   current = g;
-  $('tabBtn').classList.toggle('hidden', !isEmbedUrl(g.embed));
+  
+  const targetUrl = g.url || g.embed;
+  $('tabBtn').classList.toggle('hidden', !isValidUrl(targetUrl));
+  
   const frame = $('frame');
-  if (g.srcdoc) { frame.removeAttribute('src'); frame.srcdoc = g.srcdoc; }
-  else if (g.url || isEmbedUrl(g.embed)) { frame.removeAttribute('srcdoc'); frame.src = g.url || g.embed; }
-  else {
+  if (g.srcdoc) {
+    frame.removeAttribute('src');
+    frame.srcdoc = g.srcdoc;
+  } else if (targetUrl) {
+    frame.removeAttribute('srcdoc');
+    frame.src = targetUrl;
+  } else {
     frame.removeAttribute('src');
     frame.srcdoc = `<body style="margin:0;display:grid;place-items:center;height:100vh;background:#0b0d14;color:#94a3b8;font-family:system-ui,sans-serif;text-align:center;padding:24px">
       <div><p style="font-size:48px;margin:0">${g.emoji}</p><p><b style="color:#e2e8f0">${g.title}</b> is coming soon.</p></div></body>`;
@@ -210,13 +216,13 @@ $('grid').addEventListener('click', e => {
 
 let current = null;
 function openInNewTab(g) {
-  const url = g.page || g.embed;
-  if (isEmbedUrl(url)) window.open(url, '_blank', 'noopener');
+  const url = g.url || g.embed;
+  if (isValidUrl(url)) window.open(url, '_blank', 'noopener');
 }
 $('tabBtn').addEventListener('click', () => { if (current) { openInNewTab(current); closePlayer(); } });
 
-function isEmbedUrl(u) {
-  try { const p = new URL(u); return p.protocol === 'https:' && p.pathname.length > 1; } catch (_) { return false; }
+function isValidUrl(u) {
+  try { const p = new URL(u); return p.protocol === 'https:' || p.protocol === 'http:'; } catch (_) { return false; }
 }
 
 function closePlayer() {
