@@ -122,12 +122,48 @@
 const GENRES = ['All', 'Action', 'Racing', 'Sports'];
 const ICONS  = { All: '✨', Action: '⚡', Racing: '🏎️', Sports: '⚽' };
 
+// GAME REGISTRY WITH YOUR CUSTOM IMAGES
 const GAMES = [
-  { title: 'Classic Pool',     genre: 'Sports',   source: 'open-source', desc: '8-ball pool vs an AI opponent.', color: 'from-green-600 to-emerald-900', emoji: '🎱', img: 'games/classic-pool/assets/sprites/main_menu_background.png', url: 'games/classic-pool/index.html' },
-  { title: 'PolyTrack',         genre: 'Racing',   source: 'embed', desc: 'Low-poly time-trial racing.', color: 'from-orange-500 to-amber-700', emoji: '🏁', embed: 'https://polytrackonline.gitlab.io/' },
-  { title: 'Slope 1',           genre: 'Action',   source: 'embed', desc: 'Roll down an endless slope.', color: 'from-green-500 to-slate-900', emoji: '🟢', embed: 'https://slope-1.io/' },
-  { title: 'Slope 2',           genre: 'Action',   source: 'embed', desc: 'Roll down an even faster slope.', color: 'from-emerald-500 to-slate-900', emoji: '🟩', embed: 'https://slope-1.io/' },
-  { title: 'Ragdoll Archers',   genre: 'Action',   source: 'embed', desc: 'Physics archery duels.', color: 'from-yellow-600 to-red-800', emoji: '🎯', embed: 'https://ragdollarchers2.io/' },
+  { 
+    title: 'Classic Pool',     
+    genre: 'Sports',   
+    source: 'open-source', 
+    desc: '8-ball pool vs an AI opponent.', 
+    img: 'games/classic-pool/assets/sprites/main_menu_background.png', 
+    url: 'games/classic-pool/index.html' 
+  },
+  { 
+    title: 'PolyTrack',         
+    genre: 'Racing',   
+    source: 'open-source', 
+    desc: 'Low-poly time-trial racing.', 
+    img: 'games/polytrack/cover.jpg', 
+    url: 'games/polytrack/index.html' 
+  },
+  { 
+    title: 'Slope 1',           
+    genre: 'Action',   
+    source: 'open-source', 
+    desc: 'Roll down an endless slope.', 
+    img: 'games/slope-1/cover.jpg', 
+    url: 'games/slope-1/index.html' 
+  },
+  { 
+    title: 'Slope 2',           
+    genre: 'Action',   
+    source: 'open-source', 
+    desc: 'Roll down an even faster slope.', 
+    img: 'games/slope-2/cover.jpg', 
+    url: 'games/slope-2/index.html' 
+  },
+  { 
+    title: 'Ragdoll Archers',   
+    genre: 'Action',   
+    source: 'embed', 
+    desc: 'Physics archery duels.', 
+    img: 'games/ragdoll-archers/cover.jpg', 
+    embed: 'https://ragdollarchers2.io/' 
+  }
 ];
 
 const $ = id => document.getElementById(id);
@@ -143,152 +179,4 @@ function renderNav() {
 function renderGrid() {
   $('grid').innerHTML = GAMES.map((g, i) => `
     <article data-play="${i}" class="game-card card-glow relative rounded-2xl overflow-hidden bg-[#151925] border border-white/5"
-             data-title="${g.title.toLowerCase()}" data-desc="${g.desc.toLowerCase()}" data-genre="${g.genre}">
-      <div class="relative aspect-[4/3] overflow-hidden">
-        ${g.img
-          ? `<img class="thumb absolute inset-0 w-full h-full object-cover" src="${g.img}" alt="${g.title}" loading="lazy">`
-          : `<div class="thumb absolute inset-0 bg-gradient-to-br ${g.color} flex flex-col justify-end px-5 pb-11">
-               <div class="absolute inset-0 opacity-20" style="background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.35) 0 2px,transparent 2px 14px)"></div>
-               <p class="relative ${g.title.length > 10 ? 'text-xl sm:text-2xl' : 'text-3xl sm:text-4xl'} font-extrabold tracking-tight leading-none drop-shadow">${g.title}</p>
-             </div>`}
-        <span class="absolute top-3 left-3 text-xs font-semibold px-2 py-1 rounded-md bg-black/40 backdrop-blur">${g.genre}</span>
-        <div class="overlay absolute inset-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col justify-end p-4">
-          <p class="desc text-sm text-slate-200 mb-3">${g.desc}</p>
-          <button class="w-full py-3 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold text-sm transition">▶ Play Now</button>
-        </div>
-      </div>
-      <div class="p-4">
-        <h3 class="font-bold">${g.title}</h3>
-        <p class="text-xs text-slate-500 mt-0.5 line-clamp-2">${g.desc}</p>
-      </div>
-    </article>`).join('');
-}
-
-function applyFilters() {
-  const q = $('search').value.trim().toLowerCase();
-  let shown = 0;
-  document.querySelectorAll('.game-card').forEach(card => {
-    const matchGenre = activeGenre === 'All' || card.dataset.genre === activeGenre;
-    const matchText  = !q || card.dataset.title.includes(q) || card.dataset.desc.includes(q);
-    const ok = matchGenre && matchText;
-    card.classList.toggle('hidden', !ok);
-    if (ok) shown++;
-  });
-  $('empty').classList.toggle('hidden', shown > 0);
-  $('sectionTitle').textContent = activeGenre === 'All' ? 'All Games' : `${activeGenre} Games`;
-  $('resultCount').textContent = `${shown} game${shown === 1 ? '' : 's'}`;
-}
-
-$('genreNav').addEventListener('click', e => {
-  const btn = e.target.closest('[data-genre]');
-  if (!btn) return;
-  activeGenre = btn.dataset.genre;
-  renderNav();
-  applyFilters();
-});
-$('search').addEventListener('input', applyFilters);
-
-$('grid').addEventListener('click', e => {
-  const card = e.target.closest('[data-play]');
-  if (!card) return;
-  const g = GAMES[card.dataset.play];
-  current = g;
-  
-  const targetUrl = g.url || g.embed;
-  $('tabBtn').classList.toggle('hidden', !isValidUrl(targetUrl));
-  
-  const frame = $('frame');
-  if (g.srcdoc) {
-    frame.removeAttribute('src');
-    frame.srcdoc = g.srcdoc;
-  } else if (targetUrl) {
-    frame.removeAttribute('srcdoc');
-    frame.src = targetUrl;
-  } else {
-    frame.removeAttribute('src');
-    frame.srcdoc = `<body style="margin:0;display:grid;place-items:center;height:100vh;background:#0b0d14;color:#94a3b8;font-family:system-ui,sans-serif;text-align:center;padding:24px">
-      <div><p style="font-size:48px;margin:0">${g.emoji}</p><p><b style="color:#e2e8f0">${g.title}</b> is coming soon.</p></div></body>`;
-  }
-  $('playerTitle').textContent = g.title;
-  $('player').classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-});
-
-let current = null;
-function openInNewTab(g) {
-  const url = g.url || g.embed;
-  if (isValidUrl(url)) window.open(url, '_blank', 'noopener');
-}
-$('tabBtn').addEventListener('click', () => { if (current) { openInNewTab(current); closePlayer(); } });
-
-function isValidUrl(u) {
-  try { const p = new URL(u); return p.protocol === 'https:' || p.protocol === 'http:'; } catch (_) { return false; }
-}
-
-function closePlayer() {
-  if (document.fullscreenElement) document.exitFullscreen?.();
-  $('panel').classList.remove('full');
-  $('player').classList.add('hidden');
-  $('tabBtn').classList.add('hidden');
-  current = null;
-  $('frame').removeAttribute('src');
-  $('frame').srcdoc = '';
-  document.body.style.overflow = '';
-}
-$('closeBtn').addEventListener('click', closePlayer);
-$('player').addEventListener('click', e => { if (e.target.id === 'player') closePlayer(); });
-
-$('fsBtn').addEventListener('click', () => {
-  const p = $('panel');
-  const req = p.requestFullscreen || p.webkitRequestFullscreen;
-  if (req && !document.fullscreenElement) {
-    Promise.resolve(req.call(p)).catch(() => p.classList.toggle('full'));
-  } else if (document.fullscreenElement) {
-    document.exitFullscreen();
-  } else {
-    p.classList.toggle('full');
-  }
-});
-
-$('frame').addEventListener('load', () => {
-  try {
-    const w = $('frame').contentWindow;
-    w.addEventListener('keydown', onKey);
-    w.focus();
-  } catch (_) {}
-});
-
-const ARCADE = { title: document.title, icon: $('favicon').href };
-const DECOY  = {
-  title: 'Photosynthesis – Biology Notes',
-  icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M14 4h26l12 12v44H14z' fill='%23ffffff' stroke='%23999' stroke-width='3'/%3E%3Cpath d='M22 28h20M22 36h20M22 44h14' stroke='%23666' stroke-width='3'/%3E%3C/svg%3E"
-};
-let panicked = false;
-
-function setPanic(on) {
-  panicked = on;
-  if (on) closePlayer();
-  $('app').classList.toggle('hidden', on);
-  $('panicFab').classList.toggle('hidden', on);
-  $('decoy').classList.toggle('hidden', !on);
-  document.body.style.background = on ? '#ffffff' : '';
-  const s = on ? DECOY : ARCADE;
-  document.title = s.title;
-  $('favicon').href = s.icon;
-  window.scrollTo(0, 0);
-}
-
-function onKey(e) {
-  if (e.key === 'Escape') { e.preventDefault(); setPanic(!panicked); }
-}
-document.addEventListener('keydown', onKey);
-$('panicFab').addEventListener('click', () => setPanic(true));
-$('panicBtn').addEventListener('click', () => setPanic(true));
-$('decoyBar').addEventListener('click', () => setPanic(false));
-
-renderNav();
-renderGrid();
-applyFilters();
-</script>
-</body>
-</html>
+             data-title="${g.title.toLowerCase()}" data-desc="${g
