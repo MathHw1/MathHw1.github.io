@@ -115,8 +115,16 @@ Game_Singleton.prototype.mainLoop = function () {
     
 
     if(DISPLAY && !GAME_STOPPED){
-        Game.gameWorld.handleInput(DELTA);
-        Game.gameWorld.update(DELTA);
+        // Run the physics a fixed 60 steps a second, so the game plays at the same speed
+        // on 60Hz and 120Hz screens (and doesn't speed up if two loops ever run at once).
+        var now = performance.now();
+        Game.stepTime = (Game.stepTime || 0) + (Game.lastFrame ? Math.min(now - Game.lastFrame, 100) : STEP_MS);
+        Game.lastFrame = now;
+        while(Game.stepTime >= STEP_MS){
+            Game.gameWorld.handleInput(DELTA);
+            Game.gameWorld.update(DELTA);
+            Game.stepTime -= STEP_MS;
+        }
         Canvas2D.clear();
         Game.gameWorld.draw();
         Mouse.reset();

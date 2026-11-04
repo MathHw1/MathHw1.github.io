@@ -16,6 +16,9 @@ Stick.prototype.handleInput = function (delta) {
     if(AI_ON && Game.policy.turn === AI_PLAYER_NUM)
       return;
 
+    if(Online.isRemoteTurn())
+      return;
+
     if(Game.policy.turnPlayed)
       return;
 
@@ -34,16 +37,7 @@ Stick.prototype.handleInput = function (delta) {
     }
 
     else if (this.power>0 && Mouse.left.down){
-      var strike = sounds.strike.cloneNode(true);
-      strike.volume = (this.power/(10))<1?(this.power/(10)):1;
-      strike.play();
-      Game.policy.turnPlayed = true;
-      this.shooting = true;
-      this.origin = this.shotOrigin.copy();
-
-      Game.gameWorld.whiteBall.shoot(this.power, this.rotation);
-      var stick = this;
-      setTimeout(function(){stick.visible = false;}, 500);
+      this.shoot(this.power, this.rotation);
     }
     else if(this.trackMouse){
       var opposite = Mouse.position.y - this.position.y;
@@ -53,6 +47,8 @@ Stick.prototype.handleInput = function (delta) {
 };
 
 Stick.prototype.shoot = function(power, rotation){
+  Online.sendShot(power, rotation);   // does nothing outside online games
+
   this.power = power;
   this.rotation = rotation;
 

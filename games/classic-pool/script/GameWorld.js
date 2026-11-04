@@ -73,9 +73,25 @@ GameWorld.prototype.handleInput = function (delta) {
 GameWorld.prototype.update = function (delta) {
     this.stick.update(delta);
 
-    for (var i = 0 ; i < this.balls.length; i++){
-        for(var j = i + 1 ; j < this.balls.length ; j++){
-            this.handleCollision(this.balls[i], this.balls[j], delta);
+    // Split the step into sub-steps short enough that no ball moves more than a quarter
+    // of its width at a time, so fast balls can't pass straight through each other.
+    var fastest = 0;
+    for (var i = 0 ; i < this.balls.length; i++) {
+        if(this.balls[i].moving && !this.balls[i].inHole){
+            fastest = Math.max(fastest, this.balls[i].velocity.length);
+        }
+    }
+    var subSteps = Math.max(1, Math.ceil(fastest * delta / (BALL_SIZE / 4)));
+    var subDelta = delta / subSteps;
+
+    for (var s = 0 ; s < subSteps; s++) {
+        for (var i = 0 ; i < this.balls.length; i++) {
+            this.balls[i].updatePosition(subDelta);
+        }
+        for (var i = 0 ; i < this.balls.length; i++){
+            for(var j = i + 1 ; j < this.balls.length ; j++){
+                this.handleCollision(this.balls[i], this.balls[j]);
+            }
         }
     }
 
@@ -83,7 +99,8 @@ GameWorld.prototype.update = function (delta) {
         this.balls[i].update(delta);
     }
 
-    if(!this.ballsMoving() && AI.finishedSession){
+    // In online games the shooter's game decides what happened and sends it over.
+    if(!this.ballsMoving() && AI.finishedSession && !Online.isRemoteTurn()){
         Game.policy.updateTurnOutcome();
         if(Game.policy.foul){
             this.ballInHand();
@@ -148,7 +165,10 @@ GameWorld.prototype.ballsMoving = function(){
     return ballsMoving;
 }
 
-GameWorld.prototype.handleCollision = function(ball1, ball2, delta){
+// Share of the closing speed kept when two balls hit (1 would be a perfectly elastic hit).
+const BALL_BOUNCE = 0.95;
+
+GameWorld.prototype.handleCollision = function(ball1, ball2){
 
     if(ball1.inHole || ball2.inHole)
         return;
@@ -156,42 +176,47 @@ GameWorld.prototype.handleCollision = function(ball1, ball2, delta){
     if(!ball1.moving && !ball2.moving)
         return;
 
-    var ball1NewPos = ball1.position.add(ball1.velocity.multiply(delta));
-    var ball2NewPos = ball2.position.add(ball2.velocity.multiply(delta));
+    var dx = ball2.position.x - ball1.position.x;
+    var dy = ball2.position.y - ball1.position.y;
+    var dist = Math.sqrt(dx*dx + dy*dy);
 
-    var dist = ball1NewPos.distanceFrom(ball2NewPos);
+    if(dist >= BALL_SIZE || dist === 0)
+        return;
 
-    if(dist<BALL_SIZE){
-        Game.policy.checkColisionValidity(ball1, ball2);
+    // Unit vector from ball1's centre to ball2's.
+    var nx = dx / dist;
+    var ny = dy / dist;
 
-        var power = (Math.abs(ball1.velocity.x) + Math.abs(ball1.velocity.y)) + 
-                    (Math.abs(ball2.velocity.x) + Math.abs(ball2.velocity.y));
-        power = power * 0.00482;
+    // Push the balls apart so they never overlap or stick together.
+    var overlap = (BALL_SIZE - dist) / 2;
+    ball1.position.x -= nx * overlap;
+    ball1.position.y -= ny * overlap;
+    ball2.position.x += nx * overlap;
+    ball2.position.y += ny * overlap;
 
-        if(Game.sound && SOUND_ON){
-            var ballsCollide = sounds.ballsCollide.cloneNode(true);
-            ballsCollide.volume = (power/(20))<1?(power/(20)):1;
-            ballsCollide.play();
-        }
+    // How fast they're moving towards each other along that line.
+    var closing = (ball1.velocity.x - ball2.velocity.x) * nx + (ball1.velocity.y - ball2.velocity.y) * ny;
+    if(closing <= 0)
+        return;
 
-        var opposite = ball1.position.y - ball2.position.y;
-        var adjacent = ball1.position.x - ball2.position.x;
-        var rotation = Math.atan2(opposite, adjacent);
+    Game.policy.checkColisionValidity(ball1, ball2);
 
-        ball1.moving = true;
-        ball2.moving = true;
-
-        var velocity2 = new Vector2(90*Math.cos(rotation + Math.PI)*power,90*Math.sin(rotation + Math.PI)*power);
-        ball2.velocity = ball2.velocity.addTo(velocity2);
-
-        ball2.velocity.multiplyWith(0.97);
-
-        var velocity1 = new Vector2(90*Math.cos(rotation)*power,90*Math.sin(rotation)*power);
-        ball1.velocity = ball1.velocity.addTo(velocity1);
-
-        ball1.velocity.multiplyWith(0.97);
+    if(Game.sound && SOUND_ON){
+        var ballsCollide = sounds.ballsCollide.cloneNode(true);
+        ballsCollide.volume = Math.min(closing / 2000, 1);
+        ballsCollide.play();
     }
 
+    // Equal-mass balls: trade the part of the velocity along the line between centres,
+    // the way real pool balls do (a straight hit stops the cue ball, a thin cut barely moves the object ball).
+    var impulse = closing * (1 + BALL_BOUNCE) / 2;
+    ball1.velocity.x -= impulse * nx;
+    ball1.velocity.y -= impulse * ny;
+    ball2.velocity.x += impulse * nx;
+    ball2.velocity.y += impulse * ny;
+
+    ball1.moving = true;
+    ball2.moving = true;
 }
 
 GameWorld.prototype.draw = function () {

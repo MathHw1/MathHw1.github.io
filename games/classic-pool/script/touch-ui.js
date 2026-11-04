@@ -30,9 +30,10 @@ function initTouchUI() {
 
     function stick() { return Game.gameWorld && Game.gameWorld.stick; }
     function cpuTurn() { return Game.policy && AI_ON && Game.policy.turn === AI_PLAYER_NUM; }
+    function otherTurn() { return cpuTurn() || Online.isRemoteTurn(); }
     function canShoot() {
         var s = stick();
-        return !!s && !GAME_STOPPED && !cpuTurn() && !Game.policy.turnPlayed &&
+        return !!s && !GAME_STOPPED && !otherTurn() && !Game.policy.turnPlayed &&
             s.visible && !s.shooting && !Game.gameWorld.whiteBall.moving;
     }
 
@@ -77,6 +78,7 @@ function initTouchUI() {
         if (playing) {
             if (innerHeight > innerWidth) t = 'Turn your iPad sideways for a bigger table';
             else if (cpuTurn()) t = 'Computer’s turn…';
+            else if (Online.isRemoteTurn()) t = 'Your opponent’s turn…';
             else if (stick() && !stick().visible && !stick().shooting && !Game.gameWorld.whiteBall.moving) t = 'Tap the table to place the white ball';
             else if (canShoot() && !dragging) t = 'Touch the table to aim, then pull the bar down';
         }

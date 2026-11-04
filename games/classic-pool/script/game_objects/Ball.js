@@ -57,24 +57,27 @@ var calculateBallVelocity = function(power, angle){
     return new Vector2(100*Math.cos(angle)*power,100*Math.sin(angle)*power);
 }
 
+// Share of speed a ball keeps each physics step (table friction) and after hitting a cushion.
+const BALL_FRICTION = 0.98;
+const CUSHION_BOUNCE = 0.9;
+
+// Called once per physics step, after GameWorld has moved the balls.
 Ball.prototype.update = function(delta){
 
-    this.updatePosition(delta);
-
-    this.velocity.multiplyWith(0.98);
+    this.velocity.multiplyWith(BALL_FRICTION);
 
 	if(this.moving && Math.abs(this.velocity.x) < 1 && Math.abs(this.velocity.y) < 1){
         this.stop();
     }
 }
 
+// Moves the ball by one sub-step, bouncing off cushions and dropping into pockets.
 Ball.prototype.updatePosition = function(delta){
 
     if(!this.moving || this.inHole)
         return;
-    var ball = this;
-    var newPos = this.position.add(this.velocity.multiply(delta));
 
+    var newPos = this.position.add(this.velocity.multiply(delta));
 
 	if(Game.policy.isInsideHole(newPos)){
         if(Game.sound && SOUND_ON){
@@ -84,43 +87,48 @@ Ball.prototype.updatePosition = function(delta){
         }
 		this.position = newPos;
         this.inHole = true;
-        setTimeout(function(){ball.visible=false;ball.velocity = Vector2.zero;}, 100);
+        // Done straight away, not on a timer: timers left over from the computer's
+        // practice shots used to fire later and hide balls in the real game.
+        this.visible = false;
+        this.stop();
         Game.policy.handleBallInHole(this);
 		return;
 	}
 
-    var collision = this.handleCollision(newPos);
-
-    if(collision){
-		this.velocity.multiplyWith(0.95);
-    }else{
-    	this.position = newPos;
-    }
+    this.position = newPos;
+    this.handleCollision();
 }
 
-Ball.prototype.handleCollision = function(newPos){
+Ball.prototype.handleCollision = function(){
 
+	var policy = Game.policy;
+	var r = this.origin.x;
 	var collision = false;
 
-	if(Game.policy.isXOutsideLeftBorder(newPos, this.origin)){
-        this.velocity.x = -this.velocity.x;
-        this.position.x = Game.policy.leftBorderX + this.origin.x;
+	if(this.position.x - r < policy.leftBorderX){
+        this.position.x = policy.leftBorderX + r;
+        this.velocity.x = Math.abs(this.velocity.x) * CUSHION_BOUNCE;
         collision = true;
     }
-    else if(Game.policy.isXOutsideRightBorder(newPos, this.origin)){
-        this.velocity.x = -this.velocity.x;
-        this.position.x = Game.policy.rightBorderX - this.origin.x;
+    else if(this.position.x + r > policy.rightBorderX){
+        this.position.x = policy.rightBorderX - r;
+        this.velocity.x = -Math.abs(this.velocity.x) * CUSHION_BOUNCE;
         collision = true;
     }
 
-    if(Game.policy.isYOutsideTopBorder(newPos, this.origin)){
-        this.velocity.y = -this.velocity.y;
-        this.position.y = Game.policy.topBorderY + this.origin.y;
+    // The long cushions have a gap at the middle pockets. Without it, a ball had to arrive
+    // within about 10px of dead centre to drop, so the middle pockets almost never took a ball.
+    if(Math.abs(this.position.x - policy.topCenterHolePos.x) < MIDDLE_POCKET_MOUTH)
+        return collision;
+
+    if(this.position.y - r < policy.topBorderY){
+        this.position.y = policy.topBorderY + r;
+        this.velocity.y = Math.abs(this.velocity.y) * CUSHION_BOUNCE;
         collision = true;
     }
-    else if(Game.policy.isYOutsideBottomBorder(newPos, this.origin)){
-        this.velocity.y = -this.velocity.y;
-        this.position.y = Game.policy.bottomBorderY - this.origin.y;
+    else if(this.position.y + r > policy.bottomBorderY){
+        this.position.y = policy.bottomBorderY - r;
+        this.velocity.y = -Math.abs(this.velocity.y) * CUSHION_BOUNCE;
         collision = true;
     }
 
@@ -137,7 +145,7 @@ Ball.prototype.reset = function(){
 	this.inHole = false;
 	this.moving = false;
 	this.velocity = Vector2.zero;
-	this.position = this.initPos;
+	this.position = this.initPos.copy();   // a copy, so cushion bounces can't move the rack spot
 	this.visible = true;
 }
 

@@ -85,7 +85,7 @@ GamePolicy.prototype.checkColisionValidity = function(ball1,ball2){
 }
 GamePolicy.prototype.handleBallInHole = function(ball){
 
-    setTimeout(function(){ball.out();}, 100);
+    ball.out();
 
     let currentPlayer = this.players[this.turn];
     let secondPlayer = this.players[(this.turn+1)%2];
@@ -110,6 +110,7 @@ GamePolicy.prototype.handleBallInHole = function(ball){
 
     if(currentPlayer.color === ball.color){
         currentPlayer.matchScore.increment();
+        currentPlayer.points += POINTS_PER_BALL;
         this.scored = true;
         this.validBallsInsertedOnTurn++;
     }
@@ -149,6 +150,7 @@ GamePolicy.prototype.handleBallInHole = function(ball){
     }
     else{
         secondPlayer.matchScore.increment();
+        secondPlayer.points += POINTS_PER_BALL;
         this.foul = true;
     }
 }
@@ -172,6 +174,7 @@ GamePolicy.prototype.updateTurnOutcome = function(){
         
         if(!this.foul){
             this.players[this.turn].totalScore.increment();
+            this.players[this.turn].points += POINTS_PER_RACK;
             if(AI.finishedSession){
                 this.reset()
                 setTimeout(function(){Game.gameWorld.reset();
@@ -180,6 +183,7 @@ GamePolicy.prototype.updateTurnOutcome = function(){
         }
         else{
             this.players[(this.turn+1)%2].totalScore.increment();
+            this.players[(this.turn+1)%2].points += POINTS_PER_RACK;
             if(AI.finishedSession){
                 this.reset();
                 setTimeout(function(){Game.gameWorld.reset();
@@ -276,5 +280,8 @@ GamePolicy.prototype.initiateState = function(policyState){
     this.players[0].color = policyState.players[0].color;
     this.players[1].matchScore.value = policyState.players[1].matchScore.value;
     this.players[1].color = policyState.players[1].color;
+
+    this.players[0].points = policyState.players[0].points || 0;
+    this.players[1].points = policyState.players[1].points || 0;
 
 }

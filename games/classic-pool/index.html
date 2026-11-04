@@ -21,6 +21,7 @@
     </script>
     <link rel="stylesheet" type="text/css" href="css/game-layout.css"/>
     <link rel="shortcut icon" type="image/png" href="assets/sprites/favicon.png"/>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <script src="script/lib/LAB.min.js"></script>
     <script src="script/touch-ui.js"></script>
     <script>
@@ -47,9 +48,13 @@
                 .script('script/GamePolicy.js').wait()
                 .script('script/GameWorld.js').wait()
                 .script('script/Game.js').wait()
+                .script('script/online/Online.js').wait()
+                .script('script/Scoreboard.js').wait()
                 .script('script/Assets.js').wait(function () {
                     Game.start('gameArea','screen', 1500, 825);
                     initTouchUI();
+                    Online.initUI();
+                    initScoreboard();
                 });
 
     </script>
