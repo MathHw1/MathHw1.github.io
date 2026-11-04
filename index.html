@@ -20,7 +20,6 @@
     .card-glow:hover .overlay, .card-glow:focus-within .overlay { opacity: 1; transform: translateY(0); }
     .card-glow .thumb { transition: transform .5s ease; }
     .card-glow:hover .thumb { transform: scale(1.08); }
-    /* Touch screens (iPad/phones) have no hover: always show the Play button */
     @media (hover: none) {
       .card-glow:hover { transform: none; box-shadow: none; }
       .card-glow:hover .thumb { transform: none; }
@@ -30,7 +29,6 @@
     .nav-btn.active { background: rgba(124,58,237,.18); color: #c4b5fd; border-color: rgba(124,58,237,.5); }
     #panel.full { position: fixed; inset: 0; max-width: none; max-height: none; border-radius: 0; border: 0; }
     ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: #2a2f3d; border-radius: 8px; }
-    /* Decoy (panic) page styles */
     #decoy { font-family: Georgia, 'Times New Roman', serif; color: #202122; background: #fff; }
     #decoy h1 { font-size: 1.9rem; border-bottom: 1px solid #a2a9b1; padding-bottom: .25rem; margin-bottom: .75rem; }
     #decoy h2 { font-size: 1.4rem; border-bottom: 1px solid #a2a9b1; margin: 1.5rem 0 .5rem; }
@@ -126,7 +124,7 @@ const ICONS  = { All: '✨', Action: '⚡', Racing: '🏎️', Sports: '⚽' };
 
 const GAMES = [
   { title: 'Classic Pool',     genre: 'Sports',   source: 'open-source', desc: '8-ball pool vs an AI opponent.', color: 'from-green-600 to-emerald-900', emoji: '🎱', img: 'games/classic-pool/assets/sprites/main_menu_background.png', url: 'games/classic-pool/index.html' },
-  { title: 'PolyTrack',         genre: 'Racing',   source: 'embed', desc: 'Low-poly time-trial racing.', color: 'from-orange-500 to-amber-700', emoji: '🏁', embed: 'https://www.kodub.com/apps/polytrack' },
+  { title: 'PolyTrack',         genre: 'Racing',   source: 'embed', desc: 'Low-poly time-trial racing.', color: 'from-orange-500 to-amber-700', emoji: '🏁', embed: 'https://polytrackonline.gitlab.io/' },
   { title: 'Slope 1',           genre: 'Action',   source: 'embed', desc: 'Roll down an endless slope.', color: 'from-green-500 to-slate-900', emoji: '🟢', embed: 'https://slope-1.io/' },
   { title: 'Slope 2',           genre: 'Action',   source: 'embed', desc: 'Roll down an even faster slope.', color: 'from-emerald-500 to-slate-900', emoji: '🟩', embed: 'https://slope-1.io/' },
   { title: 'Ragdoll Archers',   genre: 'Action',   source: 'embed', desc: 'Physics archery duels.', color: 'from-yellow-600 to-red-800', emoji: '🎯', embed: 'https://ragdollarchers2.io/' },
