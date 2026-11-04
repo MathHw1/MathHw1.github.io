@@ -122,7 +122,6 @@
 const GENRES = ['All', 'Action', 'Racing', 'Sports'];
 const ICONS  = { All: '✨', Action: '⚡', Racing: '🏎️', Sports: '⚽' };
 
-// GAME REGISTRY WITH EMBEDDED CUSTOM COVERS
 const GAMES = [
   { 
     title: 'Classic Pool',     
@@ -137,7 +136,7 @@ const GAMES = [
     genre: 'Racing',   
     source: 'open-source', 
     desc: 'Low-poly time-trial racing.', 
-    img: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450"><defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="%2338bdf8"/><stop offset="1" stop-color="%23bae6fd"/></linearGradient></defs><rect width="600" height="450" fill="url(%23sky)"/><path d="M0 300 L250 200 L600 320 L600 450 L0 450 Z" fill="%23475569"/><path d="M120 450 L250 200 L300 200 L220 450 Z" fill="%23334155"/><path d="M220 270 Q280 250 340 310" stroke="%23f43f5e" stroke-width="12" fill="none"/><rect x="250" y="270" width="50" height="35" rx="6" fill="%23f43f5e"/><text x="300" y="70" font-family="Inter,sans-serif" font-weight="900" font-size="46" fill="%23ffffff" text-anchor="middle" stroke="%231e293b" stroke-width="3">PolyTrack</text></svg>',
+    img: 'games/polytrack/cover.jpg', 
     url: 'games/polytrack/index.html' 
   },
   { 
@@ -145,7 +144,7 @@ const GAMES = [
     genre: 'Action',   
     source: 'open-source', 
     desc: 'Roll down an endless slope.', 
-    img: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450"><rect width="600" height="450" fill="%23050505"/><g stroke="%2322c55e" stroke-width="1.5" fill="none" opacity="0.7"><path d="M0 150 L600 150 M0 225 L600 225 M0 300 L600 300 M0 375 L600 375 M150 0 L150 450 M300 0 L300 450 M450 0 L450 450"/></g><circle cx="300" cy="270" r="45" fill="%2322c55e" filter="drop-shadow(0 0 15px %2322c55e)"/><text x="300" y="80" font-family="Inter,sans-serif" font-weight="900" font-size="52" fill="%2322c55e" text-anchor="middle" letter-spacing="2" filter="drop-shadow(0 0 10px %2316a34a)">SLOPE 1</text></svg>',
+    img: 'games/slope-1/cover.jpg', 
     url: 'games/slope-1/index.html' 
   },
   { 
@@ -153,7 +152,7 @@ const GAMES = [
     genre: 'Action',   
     source: 'open-source', 
     desc: 'Roll down an even faster slope.', 
-    img: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450"><rect width="600" height="450" fill="%23050505"/><g stroke="%23eab308" stroke-width="1.5" fill="none" opacity="0.8"><path d="M50 0 L250 450 M550 0 L350 450 M0 200 L600 200 M0 320 L600 320"/></g><circle cx="300" cy="270" r="42" fill="%23eab308" filter="drop-shadow(0 0 15px %23eab308)"/><text x="300" y="80" font-family="Inter,sans-serif" font-weight="900" font-size="52" fill="%23eab308" text-anchor="middle" letter-spacing="2" filter="drop-shadow(0 0 10px %23ca8a04)">SLOPE 2</text></svg>',
+    img: 'games/slope-2/cover.jpg', 
     url: 'games/slope-2/index.html' 
   },
   { 
@@ -161,7 +160,7 @@ const GAMES = [
     genre: 'Action',   
     source: 'embed', 
     desc: 'Physics archery duels.', 
-    img: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450"><rect width="600" height="450" fill="%2318181b"/><path d="M120 180 L180 240 L150 360" stroke="%23d4d4d8" stroke-width="14" stroke-linecap="round" fill="none"/><path d="M150 210 Q250 270 150 330" stroke="%23f59e0b" stroke-width="6" fill="none"/><path d="M350 150 L520 190 M350 230 L500 240 M380 320 L550 300" stroke="%23ef4444" stroke-width="4" stroke-dasharray="10 6"/><circle cx="140" cy="140" r="28" fill="%23d4d4d8"/><text x="300" y="390" font-family="Inter,sans-serif" font-weight="900" font-size="40" fill="%23f43f5e" text-anchor="middle">RAGDOLL ARCHERS</text></svg>',
+    img: 'games/ragdoll-archers/cover.jpg', 
     embed: 'https://ragdollarchers2.io/' 
   }
 ];
@@ -182,7 +181,7 @@ function renderGrid() {
              data-title="${g.title.toLowerCase()}" data-desc="${g.desc.toLowerCase()}" data-genre="${g.genre}">
       <div class="relative aspect-[4/3] overflow-hidden bg-slate-900">
         ${g.img
-          ? `<img class="thumb absolute inset-0 w-full h-full object-cover" src="${g.img}" alt="${g.title}" loading="lazy" onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%25\' height=\'100%25\' viewBox=\'0 0 100 100\'%3E%3Crect width=\'100\' height=\'100\' fill=\'%231e293b\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%2394a3b8\' font-size=\'12\' font-family=\'sans-serif\'%3E🎮 Arcade%3C/text%3E%3C/svg%3E';">`
+          ? `<img class="thumb absolute inset-0 w-full h-full object-cover" src="${g.img}" alt="${g.title}" loading="lazy" onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%25\' height=\'100%25\' viewBox=\'0 0 100 100\'%3E%3Crect width=\'100\' height=\'100\' fill=\'%231e293b\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%2394a3b8\' font-size=\'12\' font-family=\'sans-serif\'%3E🎮 ${g.title}%3C/text%3E%3C/svg%3E';">`
           : `<div class="thumb absolute inset-0 bg-gradient-to-br from-violet-600 to-slate-900 flex items-center justify-center">
                <p class="text-2xl font-extrabold">${g.title}</p>
              </div>`}
@@ -223,7 +222,18 @@ $('genreNav').addEventListener('click', e => {
 });
 $('search').addEventListener('input', applyFilters);
 
-$('grid').addEventListener('click', e => {
+// Check if a local game file exists before loading iframe
+async function checkGameStatus(url) {
+  if (!url || url.startsWith('http')) return true;
+  try {
+    const res = await fetch(url, { method: 'HEAD' });
+    return res.ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+$('grid').addEventListener('click', async e => {
   const card = e.target.closest('[data-play]');
   if (!card) return;
   const g = GAMES[card.dataset.play];
@@ -231,22 +241,26 @@ $('grid').addEventListener('click', e => {
   
   const targetUrl = g.url || g.embed;
   $('tabBtn').classList.toggle('hidden', !isValidUrl(targetUrl));
-  
+  $('playerTitle').textContent = g.title;
+  $('player').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+
   const frame = $('frame');
-  if (g.srcdoc) {
-    frame.removeAttribute('src');
-    frame.srcdoc = g.srcdoc;
-  } else if (targetUrl) {
+  const fileExists = await checkGameStatus(targetUrl);
+
+  if (targetUrl && fileExists) {
     frame.removeAttribute('srcdoc');
     frame.src = targetUrl;
   } else {
     frame.removeAttribute('src');
     frame.srcdoc = `<body style="margin:0;display:grid;place-items:center;height:100vh;background:#0b0d14;color:#94a3b8;font-family:system-ui,sans-serif;text-align:center;padding:24px">
-      <div><p style="font-size:48px;margin:0">🕹️</p><p><b style="color:#e2e8f0">${g.title}</b> is coming soon.</p></div></body>`;
+      <div>
+        <p style="font-size:48px;margin:0">🛠️</p>
+        <p style="font-size:20px;font-weight:700;color:#e2e8f0;margin:12px 0 6px">${g.title}</p>
+        <p style="margin:0;color:#64748b">Game files not uploaded yet. Upload the <code>${g.url || ''}</code> folder to play!</p>
+      </div>
+    </body>`;
   }
-  $('playerTitle').textContent = g.title;
-  $('player').classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
 });
 
 let current = null;
