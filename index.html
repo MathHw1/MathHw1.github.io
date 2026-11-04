@@ -134,13 +134,14 @@ const ICONS  = { All: '✨', Action: '⚡', Racing: '🏎️', Sports: '⚽' };
 const GAMES = [
 
   /* ---- Open-source games, hosted in your repo (see the games/ folder guide) ---- */
-  { title: 'Classic Pool',      genre: 'Sports',   source: 'open-source', desc: '8-ball pool vs an AI opponent. Open source (MIT) by Chen Shmilovich.', color: 'from-green-600 to-emerald-900', emoji: '🎱', img: 'games/classic-pool/assets/sprites/main_menu_background.png', url: 'games/classic-pool/index.html' },
+  { title: 'Classic Pool',      genre: 'Sports',   source: 'open-source', desc: '8-ball pool vs an AI opponent.', color: 'from-green-600 to-emerald-900', emoji: '🎱', img: 'games/classic-pool/assets/sprites/main_menu_background.png', url: 'games/classic-pool/index.html' },
 
   /* ---- Commercial games: official publisher embeds only ----
      These load from itch.io / y8 / CrazyGames, so school networks that block those sites will block them too. */
-  { title: 'PolyTrack',         genre: 'Racing',   source: 'embed', desc: 'Low-poly time-trial racing. Official embed — may be blocked on school networks.', color: 'from-orange-500 to-amber-700', emoji: '🏁', site: 'itch.io', embed: 'https://itch.io/embed-upload/10314050?color=333333' },
-  { title: 'Slope',             genre: 'Action',   source: 'embed', desc: 'Roll down an endless slope. Official embed — may be blocked on school networks.', color: 'from-green-500 to-slate-900', emoji: '🟢', site: 'y8.com', embed: 'https://www.y8.com/embed/slope' },
-  { title: 'Ragdoll Archers',   genre: 'Action',   source: 'embed', desc: 'Physics archery duels. Opens on CrazyGames — may be blocked on school networks.', color: 'from-yellow-600 to-red-800', emoji: '🎯', site: 'CrazyGames', embed: 'https://www.crazygames.com/embed/ragdoll-archers',
+  { title: 'PolyTrack',         genre: 'Racing',   source: 'embed', desc: 'Low-poly time-trial racing.', color: 'from-orange-500 to-amber-700', emoji: '🏁', site: 'itch.io', embed: 'https://itch.io/embed-upload/10314050?color=333333' },
+  { title: 'Slope',             genre: 'Action',   source: 'embed', desc: 'Roll down an endless slope.', color: 'from-green-500 to-slate-900', emoji: '🟢', site: 'y8.com', embed: 'https://www.y8.com/embed/slope' },
+  { title: 'Slope 2',           genre: 'Action',   desc: 'Roll down an even faster slope.', color: 'from-emerald-500 to-slate-900', emoji: '🟩' },
+  { title: 'Ragdoll Archers',   genre: 'Action',   source: 'embed', desc: 'Physics archery duels.', color: 'from-yellow-600 to-red-800', emoji: '🎯', site: 'CrazyGames', embed: 'https://www.crazygames.com/embed/ragdoll-archers',
     // CrazyGames refuses to be framed on other sites, so this card skips the player and opens their page directly.
     newTab: true, page: 'https://www.crazygames.com/game/ragdoll-archers' },
 
@@ -169,10 +170,8 @@ function renderGrid() {
           : `<div class="thumb absolute inset-0 bg-gradient-to-br ${g.color} flex flex-col justify-end px-5 pb-11">
                <div class="absolute inset-0 opacity-20" style="background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.35) 0 2px,transparent 2px 14px)"></div>
                <p class="relative ${g.title.length > 10 ? 'text-xl sm:text-2xl' : 'text-3xl sm:text-4xl'} font-extrabold tracking-tight leading-none drop-shadow">${g.title}</p>
-               <p class="relative text-xs font-semibold uppercase tracking-widest text-white/70 mt-2">${g.site || ''}</p>
              </div>`}
         <span class="absolute top-3 left-3 text-xs font-semibold px-2 py-1 rounded-md bg-black/40 backdrop-blur">${g.genre}</span>
-        ${g.source ? `<span class="absolute bottom-3 left-3 text-[11px] font-semibold px-2 py-1 rounded-md bg-black/50 backdrop-blur">${g.source === 'open-source' ? '🔓 Open source' : '⚠️ May be blocked at school'}</span>` : ''}
         ${g.hot ? '<span class="absolute top-3 right-3 text-xs font-semibold px-2 py-1 rounded-md bg-rose-500/90">🔥 Popular</span>' : ''}
         <div class="overlay absolute inset-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col justify-end p-4">
           <p class="desc text-sm text-slate-200 mb-3">${g.desc}</p>
@@ -226,8 +225,7 @@ $('grid').addEventListener('click', e => {
   else {
     frame.removeAttribute('src');
     frame.srcdoc = `<body style="margin:0;display:grid;place-items:center;height:100vh;background:#0b0d14;color:#94a3b8;font-family:system-ui,sans-serif;text-align:center;padding:24px">
-      <div><p style="font-size:48px;margin:0">${g.emoji}</p><p><b style="color:#e2e8f0">${g.title}</b> needs its official embed link.</p>
-      <p>Paste the <code style="color:#c4b5fd">src</code> from the publisher's embed code into the <code style="color:#c4b5fd">embed</code> field for this game.</p></div></body>`;
+      <div><p style="font-size:48px;margin:0">${g.emoji}</p><p><b style="color:#e2e8f0">${g.title}</b> is coming soon.</p></div></body>`;
   }
   $('playerTitle').textContent = g.title;
   $('player').classList.remove('hidden');
