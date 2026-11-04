@@ -134,10 +134,10 @@ const GAMES = [
   { 
     title: 'PolyTrack',         
     genre: 'Racing',   
-    source: 'open-source', 
-    desc: 'Low-poly time-trial racing.', 
-    img: 'games/polytrack/cover.jpg', 
-    url: 'games/polytrack/index.html' 
+    source: 'new-tab',
+    desc: 'Low-poly time-trial racing.',
+    img: 'games/polytrack/cover.jpg',
+    newTab: 'https://www.kodub.com/apps/polytrack'
   },
   { 
     title: 'Slope 1',           
@@ -237,8 +237,10 @@ $('grid').addEventListener('click', async e => {
   const card = e.target.closest('[data-play]');
   if (!card) return;
   const g = GAMES[card.dataset.play];
+  // Some games refuse to load inside other sites, so open them in their own tab
+  if (g.newTab) { window.open(g.newTab, '_blank', 'noopener'); return; }
   current = g;
-  
+
   const targetUrl = g.url || g.embed;
   $('tabBtn').classList.toggle('hidden', !isValidUrl(targetUrl));
   $('playerTitle').textContent = g.title;
