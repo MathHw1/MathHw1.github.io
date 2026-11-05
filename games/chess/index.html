@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Chess | Nebula Arcade</title>
+  <style>
+    :root { --bg:#0b0d14; --panel:#151925; --line:rgba(255,255,255,.1); --text:#e2e8f0; --muted:#94a3b8; --accent:#7c3aed;
+            --light:#ecdcc0; --dark:#a97c50; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:Inter,system-ui,sans-serif;
+                 -webkit-tap-highlight-color:transparent; overscroll-behavior:none; }
+    button, input { font:inherit; }
+    button { color:inherit; border:1px solid var(--line); background:var(--panel); border-radius:10px; padding:10px 14px;
+             font-weight:600; cursor:pointer; touch-action:manipulation; }
+    button:hover { border-color:rgba(167,139,250,.7); }
+    button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+    button.on { background:rgba(124,58,237,.25); border-color:#a78bfa; color:#fff; }
+    .hidden { display:none !important; }
+
+    /* Start screen */
+    #home { height:100%; overflow:auto; padding:20px 16px 32px; }
+    #home .wrap { max-width:520px; margin:0 auto; }
+    #home h1 { margin:0 0 2px; font-size:30px; }
+    #home .sub { margin:0 0 18px; color:var(--muted); }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px; }
+    .card h2 { margin:0 0 10px; font-size:16px; }
+    .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .row + .row { margin-top:10px; }
+    .label { color:var(--muted); font-size:14px; }
+    .levels { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:10px; }
+    .levels button { padding:12px 4px; }
+    input[type=number], input[type=text] { background:#0b0f19; color:#fff; border:1px solid var(--line); border-radius:10px; padding:10px; min-width:0; }
+    #customMin { width:84px; }
+    #joinCode { flex:1; font-weight:800; letter-spacing:.2em; text-transform:uppercase; }
+    #lobbyMsg { color:#fbbf24; font-size:14px; margin:10px 0 0; }
+    #lobbyCode { font:900 36px ui-monospace,monospace; letter-spacing:.2em; text-align:center; padding:10px; margin:10px 0;
+                 background:#0b0f19; border:1px dashed rgba(167,139,250,.6); border-radius:12px; user-select:all; }
+
+    /* Game screen */
+    #game { height:100%; display:flex; flex-direction:column; align-items:center; padding:8px; gap:8px; }
+    #topbar { width:100%; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+    #status { font-weight:600; font-size:15px; line-height:1.35; padding-top:4px; min-width:0; }
+    #status.alert { color:#fca5a5; }
+    /* The clocks sit in the top right corner */
+    #clocks { flex:none; display:flex; gap:6px; }
+    .clock { min-width:78px; padding:4px 10px; border-radius:10px; background:var(--panel); border:2px solid var(--line); text-align:right; }
+    .clock .who { display:block; font-size:11px; color:var(--muted); white-space:nowrap; }
+    .clock .time { display:block; font:800 20px ui-monospace,monospace; }
+    .clock.active { border-color:#facc15; }
+    .clock.low .time { color:#f87171; }
+
+    #board { --size:min(calc(100vw - 16px), calc(100dvh - 142px)); width:var(--size); height:var(--size); flex:none;
+             display:grid; grid-template:repeat(8,1fr)/repeat(8,1fr); border-radius:8px; overflow:hidden; touch-action:none;
+             user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+    .sq { position:relative; display:grid; place-items:center; cursor:pointer; }
+    .sq * { pointer-events:none; }
+    .sq.l { background:var(--light); } .sq.d { background:var(--dark); }
+    .sq.last::after, .sq.sel::after, .sq.hint::after, .sq.check::after { content:''; position:absolute; inset:0; }
+    .sq.last::after { background:rgba(250,204,21,.35); }
+    .sq.sel::after { background:rgba(124,58,237,.45); }
+    .sq.hint::after { background:rgba(34,197,94,.55); }
+    .sq.check::after { background:radial-gradient(circle,rgba(239,68,68,.9),rgba(239,68,68,.15) 75%); }
+    .piece { position:relative; z-index:1; font-size:calc(var(--size) / 8 * .8); line-height:1; }
+    .piece.w { color:#fff; text-shadow:0 0 2px #000,0 0 2px #000,0 1px 2px #000; }
+    .piece.b { color:#111; text-shadow:0 0 1px #fff,0 0 2px rgba(255,255,255,.6); }
+    .dot { position:absolute; z-index:2; width:30%; height:30%; border-radius:50%; background:rgba(22,163,74,.75); }
+    .ring { position:absolute; z-index:2; inset:6%; border-radius:50%; border:calc(var(--size) / 8 * .09) solid rgba(220,38,38,.8); }
+    .coord { position:absolute; z-index:1; font-size:10px; font-weight:700; opacity:.7; color:#000; }
+    .coord.rank { top:2px; left:3px; } .coord.file { bottom:1px; right:3px; }
+
+    #bottom { width:min(100%, calc(100dvh - 142px + 160px)); display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:6px; }
+    #bottom button { padding:8px 12px; font-size:14px; }
+    #taken { font-size:18px; letter-spacing:1px; color:var(--muted); min-height:0; }
+
+    /* Pop-ups */
+    .modal { position:fixed; inset:0; z-index:20; display:grid; place-items:center; background:rgba(0,0,0,.6); padding:16px; }
+    .box { width:min(420px,100%); max-height:100%; overflow:auto; background:#111827; border:1px solid var(--line); border-radius:16px; padding:18px; }
+    .box h2 { margin:0 0 6px; } .box p { margin:6px 0; color:var(--muted); line-height:1.45; }
+    .box .row { margin-top:12px; justify-content:flex-end; }
+    #promoChoices { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:12px; }
+    #promoChoices button { font-size:40px; padding:6px 0; background:var(--dark); }
+    #promoChoices span { display:block; font-size:11px; color:#fff; font-weight:600; }
+    #howList b { color:#fff; }
+    #howList p { margin:8px 0; }
+  </style>
+</head>
+<body>
+
+<!-- Start screen -->
+<div id="home">
+  <div class="wrap">
+    <h1>♞ Chess</h1>
+    <p class="sub">Pick your time, then play a bot or a friend.</p>
+
+    <div class="card">
+      <h2>⏱️ Time for each player</h2>
+      <div class="row" id="times">
+        <button data-min="0">No clock</button>
+        <button data-min="3">3 min</button>
+        <button data-min="5">5 min</button>
+        <button data-min="10" class="on">10 min</button>
+        <button data-min="15">15 min</button>
+      </div>
+      <div class="row">
+        <span class="label">Or your own:</span>
+        <input id="customMin" type="number" min="1" max="180" placeholder="min" inputmode="numeric">
+        <span class="label">minutes</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🤖 Play a bot</h2>
+      <div class="row" id="colors">
+        <span class="label">Play as:</span>
+        <button data-color="w" class="on">White</button>
+        <button data-color="b">Black</button>
+        <button data-color="r">Random</button>
+      </div>
+      <div class="levels" id="levels">
+        <button data-level="easy">Easy</button>
+        <button data-level="medium">Medium</button>
+        <button data-level="hard">Hard</button>
+        <button data-level="extreme">Extreme</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🌐 Play a friend online</h2>
+      <div id="lobbyStart">
+        <div class="row"><button class="primary" id="createBtn" style="flex:1">Create a lobby</button></div>
+        <div class="row">
+          <input id="joinCode" type="text" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">
+          <button id="joinBtn">Join</button>
+        </div>
+      </div>
+      <div id="lobbyWait" class="hidden">
+        <p class="label" style="margin:0">Send this code to your friend. The game starts when they join.</p>
+        <div id="lobbyCode"></div>
+        <div class="row"><button id="cancelBtn">Cancel</button></div>
+      </div>
+      <p id="lobbyMsg" class="hidden"></p>
+    </div>
+
+    <div class="row"><button id="howBtnHome">♟️ How the pieces move</button></div>
+    <p class="sub" style="margin-top:14px;font-size:12px">Bots use <a href="https://stockfishchess.org" target="_blank" rel="noopener" style="color:inherit">Stockfish</a> (GPLv3) and the rules use <a href="https://github.com/jhlywa/chess.js" target="_blank" rel="noopener" style="color:inherit">chess.js</a> (BSD). Both licenses are in the <code>lib</code> folder.</p>
+  </div>
+</div>
+
+<!-- Game screen -->
+<div id="game" class="hidden">
+  <div id="topbar">
+    <div id="status"></div>
+    <div id="clocks">
+      <div class="clock" id="clockThem"><span class="who" id="nameThem"></span><span class="time" id="timeThem"></span></div>
+      <div class="clock" id="clockMe"><span class="who">You</span><span class="time" id="timeMe"></span></div>
+    </div>
+  </div>
+  <div id="board"></div>
+  <div id="bottom">
+    <span id="taken"></span>
+    <button id="hintBtn">💡 Hint</button>
+    <button id="undoBtn">↩️ Take back</button>
+    <button id="howBtn">♟️ Help</button>
+    <button id="resignBtn">🏳️ Resign</button>
+    <button id="menuBtn">Menu</button>
+  </div>
+</div>
+
+<!-- Choose what a pawn turns into -->
+<div id="promo" class="modal hidden">
+  <div class="box">
+    <h2>Your pawn made it! 🎉</h2>
+    <p>Pick what it turns into. The queen is almost always best.</p>
+    <div id="promoChoices"></div>
+  </div>
+</div>
+
+<!-- Game over -->
+<div id="over" class="modal hidden">
+  <div class="box">
+    <h2 id="overTitle"></h2>
+    <p id="overText"></p>
+    <div class="row">
+      <button id="overMenu">Menu</button>
+      <button id="overView">See the board</button>
+      <button id="overAgain" class="primary">Play again</button>
+    </div>
+  </div>
+</div>
+
+<!-- How the pieces move -->
+<div id="how" class="modal hidden">
+  <div class="box">
+    <h2>How to play</h2>
+    <div id="howList"></div>
+    <div class="row"><button id="howClose" class="primary">Got it</button></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="lib/chess.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
