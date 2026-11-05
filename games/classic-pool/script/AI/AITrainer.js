@@ -104,7 +104,13 @@ AITrainer.prototype.simulate = function(){
 
 AITrainer.prototype.playTurn = function(){
 
-    bestOpponent = AI.opponents[AI.bestOpponentIndex];
+    // The computer works out its best shot exactly, then (except on Extreme) misses by a little,
+    // like a real player: aim a bit off and hit a bit too hard or too soft.
+    let best = AI.opponents[AI.bestOpponentIndex];
+    bestOpponent = {
+        rotation: best.rotation + randomNormal() * AI_AIM_ERROR,
+        power: Math.max(5, Math.min(75, best.power * (1 + randomNormal() * AI_POWER_ERROR)))
+    };
     Game.gameWorld.stick.rotation = bestOpponent.rotation;
     Game.gameWorld.stick.trackMouse = false;
 
@@ -172,6 +178,11 @@ AITrainer.prototype.startSession = function(){
             },
             1000
         );
+}
+
+// A random number that's usually between -1 and 1 (normal distribution), for natural-feeling misses.
+function randomNormal(){
+    return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
 }
 
 const AI = new AITrainer();

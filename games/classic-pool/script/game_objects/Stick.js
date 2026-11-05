@@ -40,8 +40,11 @@ Stick.prototype.handleInput = function (delta) {
       this.shoot(this.power, this.rotation);
     }
     else if(this.trackMouse){
-      var opposite = Mouse.position.y - this.position.y;
-      var adjacent = Mouse.position.x - this.position.x;
+      // Point from the mouse to the ball, so the cue sits on the side you click or drag to
+      // and the shot goes away from it, like pulling a real cue back. (It used to point at
+      // the mouse, which put the cue on the opposite side of the ball.)
+      var opposite = this.position.y - Mouse.position.y;
+      var adjacent = this.position.x - Mouse.position.x;
       this.rotation = Math.atan2(opposite, adjacent);
     }
 };

@@ -11,6 +11,9 @@ const LOBBY_PREFIX = 'nebula-arcade-pool-';
 const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0/O or 1/I/L, so codes are easy to read out
 const AIM_SEND_MS = 60;
 const MAX_SYNC_WAIT_MS = 4000;
+const SERVER_TIMEOUT_MS = 12000;    // how long to wait for the matchmaking server
+const CONNECT_TIMEOUT_MS = 15000;   // how long to wait for the two computers to connect
+const JOIN_RETRIES = 2;             // extra tries before saying a lobby code doesn't exist
 
 function Online_Singleton() {
     this.on = false;            // true while an online match is being played
@@ -38,32 +41,61 @@ Online_Singleton.prototype.createLobby = function () {
     this.setStatus('Creating lobby…');
 
     var online = this;
-    this.peer = new Peer(LOBBY_PREFIX + code);
-    this.peer.on('open', function () { online.setStatus('waiting'); });
-    this.peer.on('connection', function (conn) {
-        if (online.conn) { conn.close(); return; }   // lobby is full
+    var peer = this.peer = new Peer(LOBBY_PREFIX + code);
+    this.watchServer(peer);
+    peer.on('open', function () { online.setStatus('waiting'); });
+    peer.on('connection', function (conn) {
+        // Only a friend who actually got connected fills the lobby. (A join that failed
+        // used to count too, which turned every later join away and left the lobby stuck.)
+        if (online.conn && online.conn.open) { conn.close(); return; }
+        if (online.conn) online.conn.close();
         online.attach(conn, 0);
     });
-    this.peer.on('error', function (err) {
+    peer.on('error', function (err) {
         if (err.type === 'unavailable-id') online.createLobby();   // someone has this code already
         else online.fail(err);
     });
 };
 
-Online_Singleton.prototype.joinLobby = function (code) {
+// Keeps a lobby reachable: the link to the matchmaking server can drop if you wait a while,
+// which left your code not working while the screen still said "Waiting for your friend".
+// Also gives up with a message if the server never answers, instead of hanging.
+Online_Singleton.prototype.watchServer = function (peer) {
+    var online = this;
+    peer.on('disconnected', function () {
+        if (online.peer === peer && !peer.destroyed) peer.reconnect();
+    });
+    setTimeout(function () {
+        if (online.peer === peer && !peer.open && !peer.destroyed && !online.conn) {
+            online.leave();
+            online.setStatus('The lobby server didn’t answer. Check your internet and try again.');
+        }
+    }, SERVER_TIMEOUT_MS);
+};
+
+Online_Singleton.prototype.joinLobby = function (code, triesLeft) {
     code = (code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (code.length !== 5) { this.setStatus('That code should be 5 letters or numbers.'); return; }
+    if (triesLeft === undefined) triesLeft = JOIN_RETRIES;
     this.leave();
     this.code = code;
     this.setStatus('Joining lobby ' + code + '…');
 
     var online = this;
-    this.peer = new Peer();
-    this.peer.on('open', function () {
-        online.attach(online.peer.connect(LOBBY_PREFIX + code, { reliable: true }), 1);
+    var peer = this.peer = new Peer();
+    this.watchServer(peer);
+    peer.on('open', function () {
+        if (online.conn) return;   // already joining (this fires again after a reconnect)
+        online.attach(peer.connect(LOBBY_PREFIX + code, { reliable: true }), 1);
     });
-    this.peer.on('error', function (err) {
-        if (err.type === 'peer-unavailable') online.setStatus('No lobby with code ' + code + '. Check the code and try again.');
+    peer.on('error', function (err) {
+        if (err.type === 'peer-unavailable') {
+            online.leave();
+            // The matchmaking server sometimes says a lobby doesn't exist when it does
+            // (seen right after an earlier failed join), so quietly try again first.
+            if (triesLeft > 0) online.retryTimer = setTimeout(function () { online.joinLobby(code, triesLeft - 1); }, 1500);
+            else online.setStatus('No lobby with code ' + code + '. Check the code and try again.');
+        }
         else online.fail(err);
     });
 };
@@ -73,10 +105,26 @@ Online_Singleton.prototype.attach = function (conn, playerNum) {
     this.conn = conn;
     this.myNum = playerNum;
 
+    if (playerNum === 1) this.setStatus('Connecting to your friend…');
+
     conn.on('open', function () {
         if (playerNum === 0) online.send({ t: 'start' });
     });
     conn.on('data', function (msg) { online.receive(msg); });
+    conn.on('error', function (err) { if (online.conn === conn) online.fail(err); });
+
+    // If the two computers can't reach each other, say so instead of hanging forever.
+    setTimeout(function () {
+        if (online.conn !== conn || conn.open) return;
+        online.conn = null;
+        conn.close();
+        if (playerNum === 1) {
+            online.leave();
+            online.setStatus('Couldn’t reach your friend’s game. Make sure their lobby is still open, then try again. ' +
+                'If it keeps failing, one of your networks (often school Wi-Fi) is blocking it.');
+        }
+        // The host just keeps waiting, so the friend can try again with the same code.
+    }, CONNECT_TIMEOUT_MS);
     conn.on('close', function () {
         if (online.conn !== conn) return;
         var wasPlaying = online.on;
@@ -93,6 +141,7 @@ Online_Singleton.prototype.fail = function (err) {
 };
 
 Online_Singleton.prototype.leave = function () {
+    clearTimeout(this.retryTimer);
     this.on = false;
     this.pendingSync = null;
     if (this.conn) { var c = this.conn; this.conn = null; c.close(); }

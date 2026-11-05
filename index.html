@@ -62,13 +62,13 @@
     <details open class="mb-8 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 sm:px-5 py-3">
       <summary class="cursor-pointer select-none font-semibold text-violet-200">🛠️ Bugs &amp; fixes</summary>
       <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
-        <li><b>Notes:</b> pick a subject at the top, then tap 📝 (or press Esc) to open your notes for it. Whatever you type saves on its own and is still there next time.</li>
-        <li><b>Classic Pool:</b> new <b>Play Online</b> mode. Make a lobby, send your friend the code, and play each other with a live scoreboard.</li>
-        <li><b>Classic Pool:</b> fixed the physics. Balls no longer pass through each other or stick together, bounces off the cushions are realistic, and the game runs at the same speed on every screen.</li>
-        <li><b>Slope 1 &amp; Slope 2:</b> fixed so they load in the arcade again.</li>
-        <li><b>PolyTrack:</b> now opens in a new tab, because its site won't load inside other sites.</li>
-        <li><b>All games:</b> fixed missing cover pictures.</li>
+        <li><b>Classic Pool:</b> pick how good the computer is: Easy, Medium, Hard or Extreme. The cue now sits on the side you click, and online lobbies no longer get stuck.</li>
+        <li><b>PolyTrack:</b> plays right in the arcade again, with the keyboard working straight away.</li>
+        <li><b>Slope 1:</b> now really loads Slope 1 (it was loading Slope 2 by mistake).</li>
+        <li><b>Notes:</b> added Computer Science Java. Pick a subject at the top, then tap 📝 (or press Esc). Your notes save on their own.</li>
+        <li><b>Classic Pool:</b> Play Online with a friend using a lobby code, a live scoreboard, and fixed physics.</li>
       </ul>
+      <p class="mt-3 text-xs text-slate-400">Every bug fixed so far is listed at the bottom of the page.</p>
     </details>
 
     <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -96,6 +96,31 @@
       <p class="text-5xl mb-3">🕹️</p>
       <p>No games match your search.</p>
     </div>
+
+    <!-- Footer: credit and the full list of bugs fixed (add new ones at the top of the list) -->
+    <footer class="mt-16 pt-8 border-t border-white/10 text-sm text-slate-400">
+      <details class="mb-6">
+        <summary class="cursor-pointer select-none font-semibold text-slate-200">📋 Changelog: bugs fixed</summary>
+        <ul class="mt-3 space-y-2 list-disc pl-5 leading-relaxed">
+          <li><b>Slope 1</b> was loading Slope 2. Its link pointed at a site whose "Slope 1" player actually loaded Slope 2. It now uses slopeio.org's Slope 1.</li>
+          <li><b>PolyTrack</b> couldn't be played inside the arcade, because every site hosting it blocked other sites from showing it. It now uses a version that can be shown in the arcade.</li>
+          <li><b>Games from other sites</b> didn't get the keyboard until you clicked inside them, so arrow keys and WASD did nothing at first. The game now gets the keyboard as soon as it opens.</li>
+          <li><b>Pool cue</b> showed up on the opposite side of the ball from where you clicked or dragged. It now sits on the side you click, and the shot goes the other way, like pulling a real cue back.</li>
+          <li><b>Pool computer</b> never missed on any difficulty. It now misses by a realistic amount on Easy, Medium and Hard. Extreme (which used to be called Insane) is still perfect and breaks first.</li>
+          <li><b>Pool lobby</b> got stuck for good if a friend's first try to join failed. The failed try took up the second spot, so every later join was turned away.</li>
+          <li><b>Pool lobby</b> code stopped working if the host waited a while, even though the screen still said "Waiting for your friend". The lobby now reconnects by itself.</li>
+          <li><b>Pool lobby</b> could hang forever on "Creating lobby…" or "Joining…". It now gives up after a few seconds with a message saying what went wrong.</li>
+          <li><b>Pool</b> balls could pass right through each other on hard shots.</li>
+          <li><b>Pool</b> balls could overlap and stick together, and collisions added made-up speed instead of passing it on like real balls.</li>
+          <li><b>Pool</b> ran twice as fast on 120Hz screens.</li>
+          <li><b>Pool</b> middle pockets almost never took a ball, because a ball had to arrive within about 10px of dead centre.</li>
+          <li><b>Pool</b> balls could vanish in games against the computer, caused by timers left over from its practice shots.</li>
+          <li><b>Pool</b> rack positions slowly drifted out of place over several games.</li>
+          <li><b>Game covers</b> were all uploaded to the wrong folder and replaced each other, so no covers showed.</li>
+        </ul>
+      </details>
+      <p class="text-center text-slate-500">Credit to Aram</p>
+    </footer>
   </main>
 </div>
 
@@ -116,7 +141,7 @@
         <button id="closeBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-rose-500/80 transition">✕ <span class="hidden sm:inline">Close</span></button>
       </div>
     </div>
-    <iframe id="frame" class="flex-1 w-full bg-black" allow="fullscreen *; autoplay; gamepad *" allowfullscreen></iframe>
+    <iframe id="frame" class="flex-1 w-full bg-black" allow="fullscreen *; autoplay; gamepad *; keyboard-map *" allowfullscreen></iframe>
   </div>
 </div>
 
@@ -150,10 +175,11 @@ const GAMES = [
   { 
     title: 'PolyTrack',         
     genre: 'Racing',   
-    source: 'new-tab',
+    source: 'embed',
     desc: 'Low-poly time-trial racing.',
     img: 'games/polytrack/cover.jpg',
-    newTab: 'https://www.kodub.com/apps/polytrack'
+    // The game inside sites.google.com/view/newcargame/poly-track-0-6-0 (Google Sites itself blocks embedding)
+    embed: 'https://smapskajendfjshwbekf-prog.github.io/newcargame/'
   },
   { 
     title: 'Slope 1',           
@@ -161,7 +187,8 @@ const GAMES = [
     source: 'embed',
     desc: 'Roll down an endless slope.',
     img: 'games/slope-1/cover.jpg',
-    embed: 'https://slope-1.io/embed/slope-1?pub_id=&preroll=0'
+    // The game frame from slopeio.org (slope-1.io's "Slope 1" embed was really loading Slope 2)
+    embed: 'https://slopeio.org/slope.embed'
   },
   {
     title: 'Slope 2',
@@ -318,6 +345,9 @@ $('fsBtn').addEventListener('click', () => {
 });
 
 $('frame').addEventListener('load', () => {
+  // Give the game keyboard focus straight away, so arrow keys / WASD work without clicking in first.
+  // This has to happen outside the try: games from other sites throw on contentWindow access.
+  $('frame').focus();
   try {
     const w = $('frame').contentWindow;
     w.addEventListener('keydown', onKey);
@@ -407,7 +437,41 @@ Newton's three laws of motion
 3. Every action has an equal and opposite reaction.
 
 Speed
-speed = distance ÷ time`
+speed = distance ÷ time`,
+
+  'Computer Science Java': `What a program is
+A program is a list of steps you give the computer. Java runs them one at a time, from top to bottom.
+
+Printing to the screen
+System.out.println("Hello!");
+This shows Hello! on the screen. Every statement ends with a semicolon ;
+
+Variables
+A variable is a named box that holds a value. You have to say what type it holds.
+- int age = 14;           (whole numbers)
+- double price = 4.99;    (numbers with decimals)
+- boolean done = false;   (true or false)
+- String name = "Sam";    (text, in double quotes)
+
+If statements
+Run code only when something is true:
+if (age >= 13) {
+    System.out.println("You're a teen.");
+} else {
+    System.out.println("Not a teen yet.");
+}
+
+Loops
+A for loop repeats code a set number of times:
+for (int i = 1; i <= 5; i++) {
+    System.out.println(i);
+}
+This prints 1, 2, 3, 4, 5.
+
+Common mistakes
+- Forgetting a semicolon ; at the end of a line.
+- Using = (which sets a value) when you meant == (which checks if two things are equal).
+- Java cares about capital letters: Name and name are two different variables.`
 };
 const NOTES_KEY = 'nebula-notes:';
 const SUBJECT_KEY = 'nebula-notes-subject';
