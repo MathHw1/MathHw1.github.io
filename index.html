@@ -52,7 +52,7 @@
     </div>
     <nav id="genreNav" class="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible -mx-1 px-1"></nav>
     <div class="hidden md:block mt-auto text-xs text-slate-500 leading-relaxed">
-      Press <kbd class="px-1.5 py-0.5 rounded bg-white/10 text-slate-300">Esc</kbd> or tap 📄 to switch to study mode.
+      Press <kbd class="px-1.5 py-0.5 rounded bg-white/10 text-slate-300">Esc</kbd> or tap 📝 to open your notes for the subject you picked.
     </div>
   </aside>
 
@@ -62,6 +62,7 @@
     <details open class="mb-8 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 sm:px-5 py-3">
       <summary class="cursor-pointer select-none font-semibold text-violet-200">🛠️ Bugs &amp; fixes</summary>
       <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
+        <li><b>Notes:</b> pick a subject at the top, then tap 📝 (or press Esc) to open your notes for it. Whatever you type saves on its own and is still there next time.</li>
         <li><b>Classic Pool:</b> new <b>Play Online</b> mode. Make a lobby, send your friend the code, and play each other with a live scoreboard.</li>
         <li><b>Classic Pool:</b> fixed the physics. Balls no longer pass through each other or stick together, bounces off the cushions are realistic, and the game runs at the same speed on every screen.</li>
         <li><b>Slope 1 &amp; Slope 2:</b> fixed so they load in the arcade again.</li>
@@ -75,10 +76,17 @@
         <h1 id="sectionTitle" class="text-2xl sm:text-3xl font-extrabold tracking-tight">All Games</h1>
         <p id="resultCount" class="text-sm text-slate-500 mt-1"></p>
       </div>
-      <div class="relative w-full sm:w-80">
+      <div class="flex gap-2 w-full sm:w-auto">
+      <!-- Notes: pick a subject here, then 📝 opens its notes -->
+      <select id="subject" title="Subject for 📝 notes"
+        class="shrink-0 px-3 py-3 text-base rounded-xl bg-[#151925] border border-white/10 focus:border-violet-500 outline-none text-slate-200"></select>
+      <button id="notesBtn" title="Open notes" aria-label="Open notes"
+        class="shrink-0 w-12 rounded-xl bg-[#151925] border border-white/10 hover:border-violet-500 text-xl grid place-items-center transition">📝</button>
+      <div class="relative flex-1 sm:w-80">
         <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input id="search" type="search" placeholder="Search games…" autocomplete="off"
           class="w-full pl-10 pr-4 py-3 text-base rounded-xl bg-[#151925] border border-white/10 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30 outline-none placeholder:text-slate-500 transition" />
+      </div>
       </div>
     </header>
 
@@ -92,9 +100,9 @@
 </div>
 
 <!-- Floating panic button -->
-<button id="panicFab" title="Study mode" aria-label="Study mode"
+<button id="panicFab" title="Notes" aria-label="Open notes"
   class="fixed z-30 right-4 bottom-4 w-12 h-12 rounded-full bg-white/10 hover:bg-white/25 backdrop-blur border border-white/10 text-xl grid place-items-center"
-  style="margin-bottom: env(safe-area-inset-bottom)">📄</button>
+  style="margin-bottom: env(safe-area-inset-bottom)">📝</button>
 
 <!-- Player modal -->
 <div id="player" class="hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-sm p-2 sm:p-6 flex items-center justify-center">
@@ -103,7 +111,7 @@
       <p id="playerTitle" class="font-semibold truncate"></p>
       <div class="flex gap-2 shrink-0">
         <button id="tabBtn" class="hidden px-3 py-2 text-sm rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold transition" title="Open in new tab">🚀 <span class="hidden sm:inline">Open in New Tab</span></button>
-        <button id="panicBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 transition" title="Study mode">📄</button>
+        <button id="panicBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 transition" title="Notes">📝</button>
         <button id="fsBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 transition">⛶ <span class="hidden sm:inline">Fullscreen</span></button>
         <button id="closeBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-rose-500/80 transition">✕ <span class="hidden sm:inline">Close</span></button>
       </div>
@@ -112,21 +120,17 @@
   </div>
 </div>
 
-<!-- ================= DECOY (PANIC) PAGE ================= -->
-<div id="decoy" class="hidden min-h-screen">
-  <div id="decoyBar" class="border-b border-gray-300 px-6 py-3 flex items-center gap-3 select-none" style="font-family:Arial,sans-serif">
-    <span class="text-xl">📄</span><span class="text-sm text-gray-600">Biology Notes / Unit 3</span>
+<!-- ================= NOTES PAGE (opened with 📝 or Esc) ================= -->
+<div id="decoy" class="hidden min-h-screen flex flex-col">
+  <div id="decoyBar" class="border-b border-gray-300 px-6 py-3 flex items-center gap-3 select-none cursor-default" style="font-family:Arial,sans-serif" title="Back to games">
+    <span class="text-xl">📝</span><span id="notesTitle" class="text-sm text-gray-600"></span>
+    <span id="notesSaved" class="ml-auto text-xs text-gray-400"></span>
   </div>
-  <article class="max-w-3xl mx-auto px-6 py-8">
-    <h1>Photosynthesis</h1>
-    <p><b>Photosynthesis</b> is the process by which plants, algae and some bacteria convert light energy into chemical energy stored in glucose. It takes place mainly in the <a href="#">chloroplasts</a> of leaf cells, which contain the green pigment <a href="#">chlorophyll</a>.</p>
-    <p>The overall equation is: 6CO<sub>2</sub> + 6H<sub>2</sub>O + light energy → C<sub>6</sub>H<sub>12</sub>O<sub>6</sub> + 6O<sub>2</sub>.</p>
-    <h2>Light-dependent reactions</h2>
-    <p>These reactions occur in the thylakoid membranes. Light energy is absorbed by chlorophyll and used to split water molecules (photolysis), releasing oxygen as a by-product. The energy is captured in the form of ATP and NADPH.</p>
-    <h2>The Calvin cycle</h2>
-    <p>Also called the light-independent reactions, the Calvin cycle takes place in the stroma. The enzyme RuBisCO fixes carbon dioxide onto ribulose bisphosphate, and ATP and NADPH from the light-dependent stage are used to produce glyceraldehyde-3-phosphate, which is built into glucose.</p>
-    <h2>Limiting factors</h2>
-    <p>The rate of photosynthesis is affected by light intensity, carbon dioxide concentration and temperature. Whichever factor is in shortest supply limits the overall rate.</p>
+  <article class="flex-1 w-full max-w-3xl mx-auto px-6 py-8 flex flex-col">
+    <h1 id="notesHeading"></h1>
+    <textarea id="notesText" spellcheck="true" placeholder="Start typing your notes…"
+      class="flex-1 w-full min-h-[60vh] resize-none outline-none bg-transparent"
+      style="font-family:Arial,sans-serif;font-size:1rem;line-height:1.6;color:#202122"></textarea>
   </article>
 </div>
 
@@ -322,23 +326,144 @@ $('frame').addEventListener('load', () => {
 });
 
 const ARCADE = { title: document.title, icon: $('favicon').href };
-const DECOY  = {
-  title: 'Photosynthesis – Biology Notes',
-  icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M14 4h26l12 12v44H14z' fill='%23ffffff' stroke='%23999' stroke-width='3'/%3E%3Cpath d='M22 28h20M22 36h20M22 44h14' stroke='%23666' stroke-width='3'/%3E%3C/svg%3E"
+// ---------- Notes (📝 button or Esc) ----------
+// Pick a subject at the top; 📝 opens that subject's notes. Notes save to this browser as you type.
+const NOTES_ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M14 4h26l12 12v44H14z' fill='%23ffffff' stroke='%23999' stroke-width='3'/%3E%3Cpath d='M22 28h20M22 36h20M22 44h14' stroke='%23666' stroke-width='3'/%3E%3C/svg%3E";
+
+// Starting notes for each subject. Once you type in a subject, your version is saved instead.
+const SUBJECTS = {
+  'English': `Parts of a story
+- Setting: where and when the story takes place.
+- Characters: the people in the story. The main character is called the protagonist.
+- Conflict: the main problem the characters have to deal with.
+- Plot: the order of events. It builds up to the climax (the most exciting part), then the story wraps up.
+- Theme: the big message or life lesson the story is trying to show.
+
+Writing a strong paragraph
+1. Start with a topic sentence that says your main point.
+2. Give evidence, like a quote or an example from the text.
+3. Explain how that evidence backs up your point.
+4. Finish with a sentence that sums it up.`,
+
+  'Algebra': `Variables
+A letter like x stands for a number we don't know yet.
+
+Solving an equation
+Do the same thing to both sides until x is by itself.
+Example: 2x + 3 = 11
+- Subtract 3 from both sides: 2x = 8
+- Divide both sides by 2: x = 4
+
+Order of operations (PEMDAS)
+Parentheses, Exponents, Multiply and Divide (left to right), then Add and Subtract (left to right).
+
+Slope
+Slope tells you how steep a line is.
+slope = rise ÷ run = (y2 - y1) ÷ (x2 - x1)
+In y = mx + b, m is the slope and b is where the line crosses the y-axis.`,
+
+  'Biology': `Cells
+Cells are the smallest living things. Every living thing is made of one or more cells.
+- Nucleus: holds the DNA and controls the cell.
+- Cell membrane: the outer layer that controls what goes in and out.
+- Mitochondria: turn food into energy the cell can use.
+- Plant cells also have a cell wall (for support) and chloroplasts (to make food).
+
+Photosynthesis
+Plants use sunlight, water and carbon dioxide to make sugar for food. They give off oxygen as a leftover. This happens in the chloroplasts.
+
+Cellular respiration
+Cells break down sugar to get energy. This uses oxygen and gives off carbon dioxide and water. It's kind of the opposite of photosynthesis.`,
+
+  'World History': `Early civilizations
+The first big civilizations started next to rivers:
+- Mesopotamia: Tigris and Euphrates rivers
+- Egypt: Nile River
+- India: Indus River
+- China: Yellow River
+
+Why rivers?
+Rivers gave people water for crops, fish to eat, and an easy way to travel and trade.
+
+What made them "civilizations"
+- Cities and governments
+- Writing (like cuneiform in Mesopotamia and hieroglyphics in Egypt)
+- Jobs besides farming, like traders, builders and priests
+
+Study tip: for essays, think about cause and effect. What happened, and what did it lead to?`,
+
+  'Physical Science': `Matter
+Matter is anything that has mass and takes up space. The three main states are solid, liquid and gas.
+
+Atoms
+Atoms are the tiny building blocks of matter.
+- Protons: positive charge, in the center (nucleus)
+- Neutrons: no charge, also in the nucleus
+- Electrons: negative charge, moving around the outside
+
+Newton's three laws of motion
+1. Things keep doing what they're doing (staying still or moving) unless a force acts on them.
+2. Force = mass × acceleration (F = ma).
+3. Every action has an equal and opposite reaction.
+
+Speed
+speed = distance ÷ time`
 };
+const NOTES_KEY = 'nebula-notes:';
+const SUBJECT_KEY = 'nebula-notes-subject';
+
+function store(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    localStorage.setItem(key, value);
+    return true;
+  } catch (_) { return value === undefined ? null : false; }
+}
+
+$('subject').innerHTML = Object.keys(SUBJECTS).map(name => `<option>${name}</option>`).join('');
+const savedSubject = store(SUBJECT_KEY);
+if (savedSubject in SUBJECTS) $('subject').value = savedSubject;
+// Picking a subject only remembers it; 📝 is what opens the notes.
+$('subject').addEventListener('change', () => store(SUBJECT_KEY, $('subject').value));
+
+let notesSubject = null;
+function showNotes(subject) {
+  notesSubject = subject;
+  $('notesTitle').textContent = subject + ' Notes';
+  $('notesHeading').textContent = subject;
+  const saved = store(NOTES_KEY + subject);
+  $('notesText').value = saved !== null ? saved : SUBJECTS[subject];
+  $('notesSaved').textContent = '';
+}
+
+let saveTimer;
+$('notesText').addEventListener('input', () => {
+  $('notesSaved').textContent = 'Saving…';
+  clearTimeout(saveTimer);
+  const subject = notesSubject, text = $('notesText').value;
+  saveTimer = setTimeout(() => {
+    $('notesSaved').textContent = store(NOTES_KEY + subject, text) ? 'Saved' : 'Couldn’t save (this browser blocks saving)';
+  }, 300);
+});
+// Save straight away if the page is closed or refreshed mid-typing.
+window.addEventListener('beforeunload', () => {
+  if (notesSubject) { clearTimeout(saveTimer); store(NOTES_KEY + notesSubject, $('notesText').value); }
+});
+
 let panicked = false;
 
 function setPanic(on) {
   panicked = on;
-  if (on) closePlayer();
+  if (on) { closePlayer(); showNotes($('subject').value); }
+  else if (notesSubject) { clearTimeout(saveTimer); store(NOTES_KEY + notesSubject, $('notesText').value); }
   $('app').classList.toggle('hidden', on);
   $('panicFab').classList.toggle('hidden', on);
   $('decoy').classList.toggle('hidden', !on);
   document.body.style.background = on ? '#ffffff' : '';
-  const s = on ? DECOY : ARCADE;
-  document.title = s.title;
-  $('favicon').href = s.icon;
+  document.title = on ? notesSubject + ' Notes' : ARCADE.title;
+  $('favicon').href = on ? NOTES_ICON : ARCADE.icon;
   window.scrollTo(0, 0);
+  if (on) $('notesText').focus();
 }
 
 function onKey(e) {
@@ -347,6 +472,7 @@ function onKey(e) {
 document.addEventListener('keydown', onKey);
 $('panicFab').addEventListener('click', () => setPanic(true));
 $('panicBtn').addEventListener('click', () => setPanic(true));
+$('notesBtn').addEventListener('click', () => setPanic(true));
 $('decoyBar').addEventListener('click', () => setPanic(false));
 
 renderNav();
