@@ -70,7 +70,7 @@
       <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
         <li><b>New game: Chess!</b> Play a bot (Easy, Medium, Hard or Extreme) or a friend with a lobby code. Pick your own time, and it shows you where each piece can go.</li>
         <li><b>iPad:</b> games now fill the whole screen, stray taps don't close them, and the page behind stays still while you play.</li>
-        <li><b>New games:</b> Tunnel Rush, Om Nom, Front Wars, Drift Boss, World Guesser, Fragen, and Basketball, Soccer, Boxing and Volley Random.</li>
+        <li><b>New games:</b> Tunnel Rush, Om Nom, Front Wars, Drift Boss, World Guesser, Basketball Stars, and Basketball, Soccer, Boxing and Volley Random.</li>
         <li><b>New:</b> the bottom of the page shows how many people are on the arcade right now and how many visits it has had.</li>
         <li><b>Classic Pool:</b> pick how good the computer is: Easy, Medium, Hard or Extreme. The cue now sits on the side you click, and online lobbies no longer get stuck.</li>
         <li><b>PolyTrack:</b> plays right in the arcade again, with the keyboard working straight away.</li>
@@ -181,8 +181,8 @@
 </div>
 
 <script>
-const GENRES = ['All', 'Action', 'Racing', 'Sports', 'Puzzle', 'Strategy', 'Shooter'];
-const ICONS  = { All: '✨', Action: '⚡', Racing: '🏎️', Sports: '⚽', Puzzle: '🧩', Strategy: '🗺️', Shooter: '🎯' };
+const GENRES = ['All', 'Action', 'Racing', 'Sports', 'Puzzle', 'Strategy'];
+const ICONS  = { All: '✨', Action: '⚡', Racing: '🏎️', Sports: '⚽', Puzzle: '🧩', Strategy: '🗺️' };
 
 const GAMES = [
   { 
@@ -276,21 +276,20 @@ const GAMES = [
     embed: 'https://www.worldguessr.com/' 
   },
   { 
-    title: 'Fragen',   
-    genre: 'Shooter',   
-    source: 'embed', 
-    desc: 'Fast online first-person shooter.', 
-    keyboardOnly: true, 
-    img: 'games/fragen/cover.jpg', 
-    embed: 'https://fragen.cc/' 
-  },
-  { 
     title: 'Basketball Random',   
     genre: 'Sports',   
     source: 'embed', 
     desc: 'Wobbly two-player basketball.', 
     img: 'games/basketball-random/cover.jpg', 
-    embed: 'https://basketball-random.io/' 
+    embed: 'https://gg.basketball-random.com/basketball-random/' 
+  },
+  { 
+    title: 'Basketball Stars',   
+    genre: 'Sports',   
+    source: 'embed', 
+    desc: 'One-on-one basketball with big-head players.', 
+    img: 'games/basketball-stars/cover.jpg', 
+    embed: 'https://basketball-stars.io/1.embed' 
   },
   { 
     title: 'Soccer Random',   
@@ -298,7 +297,7 @@ const GAMES = [
     source: 'embed', 
     desc: 'Wobbly two-player soccer.', 
     img: 'games/soccer-random/cover.jpg', 
-    embed: 'https://soccerrandom.io/' 
+    embed: 'https://gg.basketball-random.com/soccer-random/' 
   },
   { 
     title: 'Boxing Random',   
@@ -306,7 +305,7 @@ const GAMES = [
     source: 'embed', 
     desc: 'Wobbly two-player boxing.', 
     img: 'games/boxing-random/cover.jpg', 
-    embed: 'https://soccerrandom.io/boxing-random' 
+    embed: 'https://gg.basketball-random.com/boxing-random/' 
   },
   { 
     title: 'Volley Random',   
@@ -314,7 +313,7 @@ const GAMES = [
     source: 'embed', 
     desc: 'Wobbly two-player volleyball.', 
     img: 'games/volley-random/cover.jpg', 
-    embed: 'https://soccerrandom.io/volley-random' 
+    embed: 'https://gg.basketball-random.com/volley-random/' 
   }
 ];
 
