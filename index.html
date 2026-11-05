@@ -62,6 +62,7 @@
     <details open class="mb-8 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 sm:px-5 py-3">
       <summary class="cursor-pointer select-none font-semibold text-violet-200">🛠️ Bugs &amp; fixes</summary>
       <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
+        <li><b>New:</b> the bottom of the page shows how many people are on the arcade right now and how many visits it has had.</li>
         <li><b>Classic Pool:</b> pick how good the computer is: Easy, Medium, Hard or Extreme. The cue now sits on the side you click, and online lobbies no longer get stuck.</li>
         <li><b>PolyTrack:</b> plays right in the arcade again, with the keyboard working straight away.</li>
         <li><b>Slope 1:</b> now really loads Slope 1 (it was loading Slope 2 by mistake).</li>
@@ -119,7 +120,13 @@
           <li><b>Game covers</b> were all uploaded to the wrong folder and replaced each other, so no covers showed.</li>
         </ul>
       </details>
-      <p class="text-center text-slate-500">Credit to Aram</p>
+      <p class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-slate-500">
+        <span>Credit to Aram</span>
+        <span aria-hidden="true">·</span>
+        <span title="People with the arcade open right now"><span class="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1.5 align-middle"></span><b id="onlineCount" class="text-slate-300">…</b> online</span>
+        <span aria-hidden="true">·</span>
+        <span title="Total visits">👁️ <b id="visitCount" class="text-slate-300">…</b> visits</span>
+      </p>
     </footer>
   </main>
 </div>
@@ -542,6 +549,98 @@ $('decoyBar').addEventListener('click', () => setPanic(false));
 renderNav();
 renderGrid();
 applyFilters();
+</script>
+
+<!-- ================= ONLINE & VISITS COUNTERS ================= -->
+<!-- GitHub Pages can't count people itself, so two free public services do it:
+     - Visits: Abacus (a free counter), +1 per visit (once per browser tab, so refreshing doesn't count again).
+     - Online: a free public MQTT server. Each open page posts "I'm here" under its own random id and
+       re-posts every 20s; when the page closes (or its connection drops) its post is cleared.
+       The count is how many ids posted recently. No names or personal details are sent. -->
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+(function () {
+  const VISITS_START = 50;   // visits shown = 50 + real visits counted
+  const VISITS_URL = 'https://abacus.jasoncameron.dev/';
+  // Testing on this computer uses separate counters, so it doesn't add to the real numbers.
+  const NS = location.hostname.endsWith('github.io') ? 'mathhw1-nebula-arcade' : 'mathhw1-nebula-arcade-test';
+  const VISITS_KEY = NS + '/visits';
+  const BROKER = 'wss://broker.emqx.io:8084/mqtt';
+  const TOPIC = NS + '/v1/online/';
+  const HEARTBEAT_MS = 20000;
+  const STALE_MS = 65000;    // someone who hasn't checked in for this long counts as gone
+
+  const $ = id => document.getElementById(id);
+  const show = (id, n) => { $(id).textContent = Number(n).toLocaleString(); };
+
+  // ----- Visits -----
+  let counted = false;
+  try { counted = sessionStorage.getItem('nebula-visit-counted') === '1'; } catch (_) {}
+  // The counter service is sometimes slow, so give each try 8 seconds and try up to 3 times.
+  async function countVisit(triesLeft) {
+    try {
+      const r = await fetch(VISITS_URL + (counted ? 'get/' : 'hit/') + VISITS_KEY, { signal: AbortSignal.timeout(8000) });
+      const d = r.status === 404 ? { value: 0 } : await r.json();   // 404 = nobody counted yet
+      if (!r.ok && r.status !== 404) throw r.status;
+      show('visitCount', VISITS_START + (d.value || 0));
+      counted = true;
+      try { sessionStorage.setItem('nebula-visit-counted', '1'); } catch (_) {}
+    } catch (_) {
+      if (triesLeft > 1) setTimeout(() => countVisit(triesLeft - 1), 2000);
+      else $('visitCount').textContent = '—';
+    }
+  }
+  countVisit(3);
+
+  // ----- Currently online -----
+  if (!window.mqtt) { $('onlineCount').textContent = '—'; return; }
+  const myId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  const myTopic = TOPIC + myId;
+  const seen = new Map();   // id -> when we last heard from them
+
+  const client = mqtt.connect(BROKER, {
+    clientId: 'nebula-' + myId,
+    clean: true,
+    keepalive: 30,
+    reconnectPeriod: 5000,
+    // If this page vanishes without saying goodbye, the server clears our post for us.
+    will: { topic: myTopic, payload: '', retain: true, qos: 0 }
+  });
+
+  function hello() { client.publish(myTopic, String(Date.now()), { retain: true }); }
+  function render() {
+    const now = Date.now();
+    for (const [id, t] of seen) if (now - t > STALE_MS) seen.delete(id);
+    seen.set(myId, now);    // you're always online yourself
+    show('onlineCount', seen.size);
+  }
+
+  client.on('connect', () => {
+    client.subscribe(TOPIC + '+');
+    hello();
+    render();
+  });
+  client.on('message', (topic, payload, packet) => {
+    const id = topic.slice(TOPIC.length);
+    const text = payload.toString();
+    if (!text) { seen.delete(id); render(); return; }
+    // Saved posts from before we arrived carry the time they were made; ignore old leftovers.
+    const t = packet.retain ? Number(text) : Date.now();
+    if (Date.now() - t < STALE_MS) seen.set(id, t); else seen.delete(id);
+    render();
+  });
+  client.on('error', () => {});
+
+  setInterval(() => { if (client.connected) hello(); render(); }, HEARTBEAT_MS);
+  setInterval(render, 5000);
+  render();
+
+  // Say goodbye straight away when the page is closed, so the count drops at once.
+  window.addEventListener('pagehide', () => {
+    if (client.connected) client.publish(myTopic, '', { retain: true });
+    client.end(true);
+  });
+})();
 </script>
 </body>
 </html>
