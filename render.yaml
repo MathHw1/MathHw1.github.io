@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: nebula-lobby-server
+    runtime: node
+    rootDir: lobby-server
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: https://mathhw1.github.io
