@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Support | Nebula Arcade</title>
+  <style>
+    :root { --bg:#0b0d14; --panel:#151925; --line:rgba(255,255,255,.1); --text:#e2e8f0; --muted:#94a3b8; --accent:#7c3aed; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; min-height:100%; background:var(--bg); color:var(--text); font-family:Inter,system-ui,sans-serif; -webkit-tap-highlight-color:transparent; }
+    main { max-width:560px; margin:0 auto; padding:24px 16px 48px; }
+    a { color:#c4b5fd; }
+    h1 { margin:14px 0 4px; font-size:30px; }
+    .sub { margin:0 0 20px; color:var(--muted); line-height:1.5; }
+    form, #done { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
+    label { display:block; margin-bottom:14px; font-weight:600; font-size:15px; }
+    label small { font-weight:400; color:var(--muted); }
+    input, select, textarea { display:block; width:100%; margin-top:6px; padding:12px; font:inherit; font-size:16px; color:#fff; background:#0b0f19;
+                              border:1px solid var(--line); border-radius:10px; outline:none; }
+    input:focus, select:focus, textarea:focus { border-color:var(--accent); }
+    textarea { min-height:150px; resize:vertical; }
+    button { width:100%; padding:13px; font:inherit; font-weight:700; color:#fff; background:var(--accent); border:0; border-radius:10px; cursor:pointer; touch-action:manipulation; }
+    button:disabled { opacity:.6; cursor:default; }
+    /* Hidden from people; spam bots fill it in, which is how they get caught */
+    .trap { position:absolute; left:-9999px; }
+    #error { margin:12px 0 0; color:#fca5a5; line-height:1.45; }
+    #done h2 { margin:0 0 6px; }
+    #done p { margin:0 0 14px; color:var(--muted); line-height:1.5; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+<main>
+  <a href="./">&larr; Back to the arcade</a>
+  <h1>🛟 Support</h1>
+  <p class="sub">Found a bug or need help with a game? Tell us what happened and we’ll take a look.</p>
+
+  <form id="form">
+    <label>Your name
+      <input id="name" type="text" required maxlength="80" autocomplete="name" placeholder="So we know who this is">
+    </label>
+    <label>What’s this about?
+      <select id="topic">
+        <option>A game isn’t working</option>
+        <option>Something else on the site is broken</option>
+        <option>A question</option>
+        <option>An idea or game request</option>
+      </select>
+    </label>
+    <label>Which game? <small>(if it’s about a game)</small>
+      <input id="game" type="text" maxlength="80" autocomplete="off" placeholder="Like Classic Pool or Chess">
+    </label>
+    <label>What happened?
+      <textarea id="message" required maxlength="3000" placeholder="Tell us what you were doing and what went wrong."></textarea>
+    </label>
+    <label>Your email <small>(optional, only if you’d like a reply)</small>
+      <input id="email" type="email" maxlength="120" autocomplete="email" placeholder="you@example.com">
+    </label>
+    <label class="trap" aria-hidden="true">Leave this empty
+      <input id="botcheck" type="text" tabindex="-1" autocomplete="off">
+    </label>
+    <button id="send" type="submit">Send</button>
+    <p id="error" class="hidden" role="alert"></p>
+  </form>
+
+  <div id="done" class="hidden">
+    <h2>✅ Sent! Thanks.</h2>
+    <p>Your message is on its way.</p>
+    <button id="another" type="button">Send another</button>
+  </div>
+</main>
+
+<script>
+"use strict";
+// Messages go through Web3Forms (a free form service), which emails them to the site owner.
+// The key below is meant to be public: it can only send messages to that inbox and doesn't reveal the address.
+const ACCESS_KEY = '3ea86b5f-efc2-4e7b-9da4-c7c19ff5caf2';
+const SEND_URL = 'https://api.web3forms.com/submit';
+const SEND_TIMEOUT_MS = 20000;
+
+const $ = id => document.getElementById(id);
+
+function showError(text) {
+  $('error').textContent = text;
+  $('error').classList.toggle('hidden', !text);
+}
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  showError('');
+  const name = $('name').value.trim(), topic = $('topic').value, game = $('game').value.trim(), message = $('message').value.trim(), email = $('email').value.trim();
+  if (!name) { showError('Please add your name so we know who this is.'); return; }
+  if (!message) { showError('Please tell us what happened first.'); return; }
+
+  $('send').disabled = true;
+  $('send').textContent = 'Sending…';
+  try {
+    const response = await fetch(SEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+      body: JSON.stringify({
+        access_key: ACCESS_KEY,
+        subject: 'Nebula Arcade support from ' + name + ': ' + (game || topic),
+        from_name: 'Nebula Arcade Support',
+        name, topic, game: game || 'Not given', message,
+        email: email || undefined,
+        botcheck: $('botcheck').value
+      })
+    });
+    const result = await response.json();
+    if (!result.success) throw new Error(result.message);
+    $('form').reset();
+    $('form').classList.add('hidden');
+    $('done').classList.remove('hidden');
+  } catch (err) {
+    console.warn('Support form error', err);
+    showError('Sorry, that didn’t send. Check your internet and try again. Some school networks block this, so another network may work.');
+  } finally {
+    $('send').disabled = false;
+    $('send').textContent = 'Send';
+  }
+});
+
+$('another').addEventListener('click', () => {
+  $('done').classList.add('hidden');
+  $('form').classList.remove('hidden');
+});
+</script>
+</body>
+</html>
