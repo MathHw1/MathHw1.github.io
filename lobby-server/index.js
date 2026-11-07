@@ -37,7 +37,8 @@ const CLEANUP_MS = TEST_GRACE_MS ? Math.min(5000, TEST_GRACE_MS / 2) : 5000;
 // lower: true means the smallest value wins, as with fastest times.
 const BOARDS = {
     'wheelie:score': {}, 'wheelie:level': {}, 'wheelie:miles': {}, 'wheelie:time': { lower: true },
-    'racing:time': { lower: true }, 'chess:elo': {}, 'pool:wins': {}
+    'racing:time': { lower: true }, 'chess:elo': {}, 'pool:wins': {},
+    'tunnel:score': {}, 'tunnel:level': {}, 'tunnel:distance': {}, 'tunnel:time': {}
 };
 const BOARD_SIZE = 200;
 const SHOWN_SCORES = 20;
