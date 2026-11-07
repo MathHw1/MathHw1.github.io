@@ -70,7 +70,7 @@
     <details open class="mb-8 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 sm:px-5 py-3">
       <summary class="cursor-pointer select-none font-semibold text-violet-200">🛠️ Bugs &amp; fixes</summary>
       <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
-        <li><b>Cleaner games:</b> Ragdoll Archers, Drift Boss and Tunnel Rush now open as just the game, without their websites around them. Om Nom opens in its own tab.</li>
+        <li><b>Cleaner games:</b> games now open as just the game inside the arcade, and they can't open popups or send you to another site. Close and 📝 always stay on screen.</li>
         <li><b>New homepage:</b> MathHW now has free worksheets and practice problems. The arcade has its own page, under Math Games.</li>
         <li><b>Online lobbies:</b> Pool and Chess now connect through a game server, so they work on more networks. If your connection drops, you reconnect and pick up where you left off.</li>
         <li><b>New game: Chess!</b> Play a bot (Easy, Medium, Hard or Extreme) or a friend with a lobby code. Pick your own time, and it shows you where each piece can go.</li>
@@ -170,7 +170,9 @@
     </div>
     <!-- Tips shown on iPads/touch screens: turn sideways, or this game needs a keyboard. Tap to hide. -->
     <button id="playerTip" class="hidden shrink-0 w-full px-4 py-2 text-sm text-left bg-amber-400/15 text-amber-200 border-b border-amber-400/20"></button>
-    <iframe id="frame" class="flex-1 w-full bg-black" allow="fullscreen *; autoplay; gamepad *; keyboard-map *" allowfullscreen></iframe>
+    <div id="frameBox" class="relative flex-1 min-h-0 overflow-hidden bg-black">
+      <iframe id="frame" class="absolute inset-0 w-full h-full bg-black" allow="autoplay; gamepad *; keyboard-map *"></iframe>
+    </div>
   </div>
 </div>
 
@@ -191,6 +193,9 @@
 <script>
 const GENRES = ['All', 'Action', 'Racing', 'Sports', 'Puzzle', 'Strategy'];
 const ICONS  = { All: '✨', Action: '⚡', Racing: '🏎️', Sports: '⚽', Puzzle: '🧩', Strategy: '🗺️' };
+
+// Left out on purpose: allow-popups and allow-top-navigation (they'd let a game leave the arcade).
+const GAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-orientation-lock';
 
 const GAMES = [
   { 
@@ -257,8 +262,9 @@ const GAMES = [
     source: 'embed', 
     desc: 'Cut the rope and feed Om Nom candy.', 
     img: 'games/om-nom/cover.jpg', 
-    // Opens in its own tab: inside a frame, Famobi's Play button opens a new tab anyway
-    newTab: 'https://play.famobi.com/cut-the-rope' 
+    embed: 'https://www.viverse.com/CivaARV',
+    // Viverse has no game-only link, so its page loads at a fixed size and is cropped to the game.
+    crop: { width: 640, pageHeight: 1200, top: 45, height: 360 }
   },
   { 
     title: 'Front Wars',   
@@ -398,8 +404,6 @@ $('grid').addEventListener('click', async e => {
   const card = e.target.closest('[data-play]');
   if (!card) return;
   const g = GAMES[card.dataset.play];
-  // Some games refuse to load inside other sites, so open them in their own tab
-  if (g.newTab) { window.open(g.newTab, '_blank', 'noopener'); return; }
   current = g;
 
   const targetUrl = g.url || g.embed;
@@ -408,6 +412,7 @@ $('grid').addEventListener('click', async e => {
   $('player').classList.remove('hidden');
   lockPage(true);
   if (TOUCH) $('panel').classList.add('full');   // on an iPad, use the whole screen for the game
+  fitFrame();
   showTip();
 
   const frame = $('frame');
@@ -415,6 +420,10 @@ $('grid').addEventListener('click', async e => {
 
   if (targetUrl && fileExists) {
     frame.removeAttribute('srcdoc');
+    // Games from other sites run in a sandbox: they can't open new tabs or popups, or send
+    // this page somewhere else, so you stay in the arcade. It must be set before loading.
+    if (targetUrl.startsWith('http')) frame.setAttribute('sandbox', GAME_SANDBOX);
+    else frame.removeAttribute('sandbox');
     frame.src = targetUrl;
   } else {
     frame.removeAttribute('src');
@@ -445,6 +454,7 @@ function closePlayer() {
   $('player').classList.add('hidden');
   $('tabBtn').classList.add('hidden');
   current = null;
+  fitFrame();
   $('frame').removeAttribute('src');
   $('frame').srcdoc = '';
   $('playerTip').classList.add('hidden');
@@ -504,6 +514,20 @@ $('fsBtn').addEventListener('click', () => {
     p.classList.toggle('full');
   }
 });
+
+// Normally the game fills the player. A game with `crop` is scaled so only its game area shows.
+function fitFrame() {
+  const frame = $('frame'), crop = current && current.crop;
+  if (!crop) { frame.removeAttribute('style'); return; }
+  const box = $('frameBox').getBoundingClientRect();
+  const scale = Math.min(box.width / crop.width, box.height / crop.height);
+  const x = (box.width - crop.width * scale) / 2;
+  const y = (box.height - crop.height * scale) / 2 - crop.top * scale;
+  frame.style.cssText = `inset:auto;left:0;top:0;width:${crop.width}px;height:${crop.pageHeight}px;` +
+    `transform-origin:0 0;transform:translate(${x}px,${y}px) scale(${scale});` +
+    `clip-path:inset(${crop.top}px 0 ${crop.pageHeight - crop.top - crop.height}px 0)`;
+}
+new ResizeObserver(fitFrame).observe($('frameBox'));
 
 $('frame').addEventListener('load', () => {
   // Give the game keyboard focus straight away, so arrow keys / WASD work without clicking in first.
