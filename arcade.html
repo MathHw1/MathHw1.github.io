@@ -264,7 +264,8 @@ const GAMES = [
     img: 'games/om-nom/cover.jpg', 
     embed: 'https://www.viverse.com/CivaARV',
     // Viverse has no game-only link, so its page loads at a fixed size and is cropped to the game.
-    crop: { width: 640, pageHeight: 1200, top: 45, height: 360 }
+    // pageHeight is taller than Viverse's whole page, so it has nothing to scroll out of the crop.
+    crop: { width: 640, pageHeight: 4500, top: 45, height: 360 }
   },
   { 
     title: 'Front Wars',   
