@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Nebula Arcade</title>
+  <link id="favicon" rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%237c3aed'/%3E%3Cpath d='M18 26h28a8 8 0 0 1 8 8v4a8 8 0 0 1-14 5l-2-3H26l-2 3a8 8 0 0 1-14-5v-4a8 8 0 0 1 8-8z' fill='white'/%3E%3C/svg%3E" />
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg: #0b0d14; }
+    body { background: var(--bg); font-family: Inter, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+    button, [data-play] { touch-action: manipulation; }
+    .card-glow { transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s, border-color .35s; cursor: pointer; }
+    .card-glow:hover { transform: translateY(-6px) scale(1.02); box-shadow: 0 20px 40px -12px rgba(124,58,237,.45); border-color: rgba(167,139,250,.6); }
+    .card-glow:active { transform: scale(.98); }
+    .card-glow .overlay { opacity: 0; transform: translateY(12px); transition: all .3s ease; }
+    .card-glow:hover .overlay, .card-glow:focus-within .overlay { opacity: 1; transform: translateY(0); }
+    .card-glow .thumb { transition: transform .5s ease; }
+    .card-glow:hover .thumb { transform: scale(1.08); }
+    @media (hover: none) {
+      .card-glow:hover { transform: none; box-shadow: none; }
+      .card-glow:hover .thumb { transform: none; }
+      .card-glow .overlay { opacity: 1; transform: none; background: linear-gradient(to top, rgba(0,0,0,.75), transparent 55%); }
+      .card-glow .overlay .desc { display: none; }
+    }
+    .nav-btn.active { background: rgba(124,58,237,.18); color: #c4b5fd; border-color: rgba(124,58,237,.5); }
+    #panel.full { position: fixed; inset: 0; max-width: none; max-height: none; border-radius: 0; border: 0;
+                  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    /* iPad / touch screens: stop the page behind a game from scrolling, bouncing or popping up the copy menu */
+    #player { overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    #playerBar { touch-action: none; }
+    #playerBar button { touch-action: manipulation; }
+    html.playing, html.playing body { overscroll-behavior: none; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: #2a2f3d; border-radius: 8px; }
+    #decoy { font-family: Georgia, 'Times New Roman', serif; color: #202122; background: #fff; }
+    #decoy h1 { font-size: 1.9rem; border-bottom: 1px solid #a2a9b1; padding-bottom: .25rem; margin-bottom: .75rem; }
+    #decoy h2 { font-size: 1.4rem; border-bottom: 1px solid #a2a9b1; margin: 1.5rem 0 .5rem; }
+    #decoy p { font-family: Arial, sans-serif; font-size: 1rem; line-height: 1.6; margin-bottom: .8rem; }
+    #decoy a { color: #3366cc; }
+  </style>
+</head>
+<body class="text-slate-200 antialiased">
+
+<!-- ================= ARCADE APP ================= -->
+<div id="app" class="min-h-screen flex flex-col md:flex-row" style="padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)">
+
+  <!-- Sidebar -->
+  <aside class="md:w-56 lg:w-60 md:h-screen md:sticky md:top-0 bg-[#10131c] border-b md:border-b-0 md:border-r border-white/5 p-4 md:p-6 flex md:flex-col gap-4 md:gap-8 items-center md:items-stretch">
+    <div class="flex items-center gap-3 shrink-0">
+      <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 grid place-items-center text-xl">🎮</div>
+      <div class="hidden sm:block">
+        <p class="font-extrabold text-lg leading-none tracking-tight">Nebula</p>
+        <p class="text-xs text-slate-500">Arcade</p>
+      </div>
+    </div>
+    <nav id="genreNav" class="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible -mx-1 px-1"></nav>
+    <a href="./" class="hidden md:flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-white/5 transition"><span>📚</span><span>Math Practice</span></a>
+    <a href="support.html" class="hidden md:flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-white/5 transition"><span>🛟</span><span>Support</span></a>
+    <div class="hidden md:block mt-auto text-xs text-slate-500 leading-relaxed">
+      Press <kbd class="px-1.5 py-0.5 rounded bg-white/10 text-slate-300">Esc</kbd> or tap 📝 to open your notes for the subject you picked.
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 p-4 sm:p-6 lg:p-10 pb-24">
+    <!-- Bugs & fixes: add the newest entry at the top of the list -->
+    <details open class="mb-8 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 sm:px-5 py-3">
+      <summary class="cursor-pointer select-none font-semibold text-violet-200">🛠️ Bugs &amp; fixes</summary>
+      <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
+        <li><b>New homepage:</b> MathHW now has free worksheets and practice problems. The arcade has its own page, under Math Games.</li>
+        <li><b>Online lobbies:</b> Pool and Chess now connect through a game server, so they work on more networks. If your connection drops, you reconnect and pick up where you left off.</li>
+        <li><b>New game: Chess!</b> Play a bot (Easy, Medium, Hard or Extreme) or a friend with a lobby code. Pick your own time, and it shows you where each piece can go.</li>
+        <li><b>iPad:</b> games now fill the whole screen, stray taps don't close them, and the page behind stays still while you play.</li>
+        <li><b>New games:</b> Tunnel Rush, Om Nom, Front Wars, Drift Boss, World Guesser, Basketball Stars, and Basketball, Soccer, Boxing and Volley Random.</li>
+        <li><b>New:</b> the bottom of the page shows how many people are on the arcade right now and how many visits it has had.</li>
+        <li><b>Classic Pool:</b> pick how good the computer is: Easy, Medium, Hard or Extreme. The cue now sits on the side you click, and online lobbies no longer get stuck.</li>
+        <li><b>PolyTrack:</b> plays right in the arcade again, with the keyboard working straight away.</li>
+        <li><b>Slope 1:</b> now really loads Slope 1 (it was loading Slope 2 by mistake).</li>
+        <li><b>Notes:</b> added Computer Science Java. Pick a subject at the top, then tap 📝 (or press Esc). Your notes save on their own.</li>
+        <li><b>Classic Pool:</b> Play Online with a friend using a lobby code, a live scoreboard, and fixed physics.</li>
+      </ul>
+      <p class="mt-3 text-xs text-slate-400">Every bug fixed so far is listed at the bottom of the page.</p>
+    </details>
+
+    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div>
+        <h1 id="sectionTitle" class="text-2xl sm:text-3xl font-extrabold tracking-tight">All Games</h1>
+        <p id="resultCount" class="text-sm text-slate-500 mt-1"></p>
+      </div>
+      <div class="flex gap-2 w-full sm:w-auto">
+      <!-- Notes: pick a subject here, then 📝 opens its notes -->
+      <select id="subject" title="Subject for 📝 notes"
+        class="shrink-0 px-3 py-3 text-base rounded-xl bg-[#151925] border border-white/10 focus:border-violet-500 outline-none text-slate-200"></select>
+      <button id="notesBtn" title="Open notes" aria-label="Open notes"
+        class="shrink-0 w-12 rounded-xl bg-[#151925] border border-white/10 hover:border-violet-500 text-xl grid place-items-center transition">📝</button>
+      <div class="relative flex-1 sm:w-80">
+        <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="search" type="search" placeholder="Search games…" autocomplete="off"
+          class="w-full pl-10 pr-4 py-3 text-base rounded-xl bg-[#151925] border border-white/10 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30 outline-none placeholder:text-slate-500 transition" />
+      </div>
+      </div>
+    </header>
+
+    <section id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5"></section>
+
+    <div id="empty" class="hidden text-center py-24 text-slate-500">
+      <p class="text-5xl mb-3">🕹️</p>
+      <p>No games match your search.</p>
+    </div>
+
+    <!-- Footer: credit and the full list of bugs fixed (add new ones at the top of the list) -->
+    <footer class="mt-16 pt-8 border-t border-white/10 text-sm text-slate-400">
+      <details class="mb-6">
+        <summary class="cursor-pointer select-none font-semibold text-slate-200">📋 Changelog: bugs fixed</summary>
+        <ul class="mt-3 space-y-2 list-disc pl-5 leading-relaxed">
+          <li><b>Online lobbies</b> failed on networks that block direct connections between players, and a dropped connection ended the game.</li>
+          <li><b>iPad:</b> tapping near the edge of the screen closed the game by accident.</li>
+          <li><b>iPad:</b> Fullscreen could get stuck on older iPads, with no way back out.</li>
+          <li><b>iPad:</b> swiping in a game could scroll or bounce the arcade behind it, and long-pressing popped up the copy menu.</li>
+          <li><b>Slope 1</b> was loading Slope 2. Its link pointed at a site whose "Slope 1" player actually loaded Slope 2. It now uses slopeio.org's Slope 1.</li>
+          <li><b>PolyTrack</b> couldn't be played inside the arcade, because every site hosting it blocked other sites from showing it. It now uses a version that can be shown in the arcade.</li>
+          <li><b>Games from other sites</b> didn't get the keyboard until you clicked inside them, so arrow keys and WASD did nothing at first. The game now gets the keyboard as soon as it opens.</li>
+          <li><b>Pool cue</b> showed up on the opposite side of the ball from where you clicked or dragged. It now sits on the side you click, and the shot goes the other way, like pulling a real cue back.</li>
+          <li><b>Pool computer</b> never missed on any difficulty. It now misses by a realistic amount on Easy, Medium and Hard. Extreme (which used to be called Insane) is still perfect and breaks first.</li>
+          <li><b>Pool lobby</b> got stuck for good if a friend's first try to join failed. The failed try took up the second spot, so every later join was turned away.</li>
+          <li><b>Pool lobby</b> code stopped working if the host waited a while, even though the screen still said "Waiting for your friend". The lobby now reconnects by itself.</li>
+          <li><b>Pool lobby</b> could hang forever on "Creating lobby…" or "Joining…". It now gives up after a few seconds with a message saying what went wrong.</li>
+          <li><b>Pool</b> balls could pass right through each other on hard shots.</li>
+          <li><b>Pool</b> balls could overlap and stick together, and collisions added made-up speed instead of passing it on like real balls.</li>
+          <li><b>Pool</b> ran twice as fast on 120Hz screens.</li>
+          <li><b>Pool</b> middle pockets almost never took a ball, because a ball had to arrive within about 10px of dead centre.</li>
+          <li><b>Pool</b> balls could vanish in games against the computer, caused by timers left over from its practice shots.</li>
+          <li><b>Pool</b> rack positions slowly drifted out of place over several games.</li>
+          <li><b>Game covers</b> were all uploaded to the wrong folder and replaced each other, so no covers showed.</li>
+        </ul>
+      </details>
+      <p class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-slate-500">
+        <span>Credit to Aram</span>
+        <span aria-hidden="true">·</span>
+        <a href="support.html" class="text-violet-300 hover:text-violet-200 underline underline-offset-2">🛟 Support</a>
+        <span aria-hidden="true">·</span>
+        <span title="People with the arcade open right now"><span class="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1.5 align-middle"></span><b id="onlineCount" class="text-slate-300">…</b> online</span>
+        <span aria-hidden="true">·</span>
+        <span title="Total visits">👁️ <b id="visitCount" class="text-slate-300">…</b> visits</span>
+      </p>
+    </footer>
+  </main>
+</div>
+
+<!-- Floating panic button -->
+<button id="panicFab" title="Notes" aria-label="Open notes"
+  class="fixed z-30 right-4 bottom-4 w-12 h-12 rounded-full bg-white/10 hover:bg-white/25 backdrop-blur border border-white/10 text-xl grid place-items-center"
+  style="margin-bottom: env(safe-area-inset-bottom)">📝</button>
+
+<!-- Player modal -->
+<div id="player" class="hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-sm p-2 sm:p-6 flex items-center justify-center">
+  <div id="panel" class="w-full max-w-6xl h-full max-h-[92dvh] bg-[#10131c] rounded-2xl border border-white/10 overflow-hidden shadow-2xl flex flex-col">
+    <div id="playerBar" class="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-b border-white/5 shrink-0">
+      <p id="playerTitle" class="font-semibold truncate"></p>
+      <div class="flex gap-2 shrink-0">
+        <button id="tabBtn" class="hidden px-3 py-2 text-sm rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold transition" title="Open in new tab">🚀 <span class="hidden sm:inline">Open in New Tab</span></button>
+        <button id="panicBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 transition" title="Notes">📝</button>
+        <button id="fsBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 transition">⛶ <span class="hidden sm:inline">Fullscreen</span></button>
+        <button id="closeBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-rose-500/80 transition">✕ <span class="hidden sm:inline">Close</span></button>
+      </div>
+    </div>
+    <!-- Tips shown on iPads/touch screens: turn sideways, or this game needs a keyboard. Tap to hide. -->
+    <button id="playerTip" class="hidden shrink-0 w-full px-4 py-2 text-sm text-left bg-amber-400/15 text-amber-200 border-b border-amber-400/20"></button>
+    <iframe id="frame" class="flex-1 w-full bg-black" allow="fullscreen *; autoplay; gamepad *; keyboard-map *" allowfullscreen></iframe>
+  </div>
+</div>
+
+<!-- ================= NOTES PAGE (opened with 📝 or Esc) ================= -->
+<div id="decoy" class="hidden min-h-screen flex flex-col">
+  <div id="decoyBar" class="border-b border-gray-300 px-6 py-3 flex items-center gap-3 select-none cursor-default" style="font-family:Arial,sans-serif" title="Back to games">
+    <span class="text-xl">📝</span><span id="notesTitle" class="text-sm text-gray-600"></span>
+    <span id="notesSaved" class="ml-auto text-xs text-gray-400"></span>
+  </div>
+  <article class="flex-1 w-full max-w-3xl mx-auto px-6 py-8 flex flex-col">
+    <h1 id="notesHeading"></h1>
+    <textarea id="notesText" spellcheck="true" placeholder="Start typing your notes…"
+      class="flex-1 w-full min-h-[60vh] resize-none outline-none bg-transparent"
+      style="font-family:Arial,sans-serif;font-size:1rem;line-height:1.6;color:#202122"></textarea>
+  </article>
+</div>
+
+<script>
+const GENRES = ['All', 'Action', 'Racing', 'Sports', 'Puzzle', 'Strategy'];
+const ICONS  = { All: '✨', Action: '⚡', Racing: '🏎️', Sports: '⚽', Puzzle: '🧩', Strategy: '🗺️' };
+
+const GAMES = [
+  { 
+    title: 'Classic Pool',     
+    genre: 'Sports',   
+    source: 'open-source', 
+    desc: '8-ball pool vs the computer, a friend, or online.', 
+    img: 'games/classic-pool/cover.jpg', 
+    url: 'games/classic-pool/index.html' 
+  },
+  { 
+    title: 'Chess',   
+    genre: 'Strategy',   
+    source: 'open-source', 
+    desc: 'Play a bot or a friend. Great for beginners.', 
+    img: 'games/chess/cover.jpg?v=2', 
+    url: 'games/chess/index.html' 
+  },
+  { 
+    title: 'PolyTrack',         
+    genre: 'Racing',   
+    source: 'embed',
+    desc: 'Low-poly time-trial racing.',
+    img: 'games/polytrack/cover.jpg',
+    // The game inside sites.google.com/view/newcargame/poly-track-0-6-0 (Google Sites itself blocks embedding)
+    embed: 'https://smapskajendfjshwbekf-prog.github.io/newcargame/'
+  },
+  { 
+    title: 'Slope 1',           
+    genre: 'Action',   
+    source: 'embed',
+    desc: 'Roll down an endless slope.',
+    img: 'games/slope-1/cover.jpg',
+    // The game frame from slopeio.org (slope-1.io's "Slope 1" embed was really loading Slope 2)
+    embed: 'https://slopeio.org/slope.embed'
+  },
+  {
+    title: 'Slope 2',
+    genre: 'Action',
+    source: 'embed',
+    desc: 'Roll down an even faster slope.',
+    img: 'games/slope-2/cover.jpg',
+    embed: 'https://1games.io/embed/slope-2?pub_id=&preroll=0'
+  },
+  { 
+    title: 'Ragdoll Archers',   
+    genre: 'Action',   
+    source: 'embed', 
+    desc: 'Physics archery duels.', 
+    img: 'games/ragdoll-archers/cover.jpg', 
+    embed: 'https://ragdollarchers2.io/' 
+  },
+  { 
+    title: 'Tunnel Rush',   
+    genre: 'Action',   
+    source: 'embed', 
+    desc: 'Dodge obstacles in a spinning tunnel.', 
+    img: 'games/tunnel-rush/cover.jpg', 
+    embed: 'https://tunnelrushgame.io/' 
+  },
+  { 
+    title: 'Om Nom',   
+    genre: 'Puzzle',   
+    source: 'embed', 
+    desc: 'Cut the rope and feed Om Nom candy.', 
+    img: 'games/om-nom/cover.jpg', 
+    embed: 'https://www.viverse.com/CivaARV' 
+  },
+  { 
+    title: 'Front Wars',   
+    genre: 'Strategy',   
+    source: 'embed', 
+    desc: 'Take over the map, one front at a time.', 
+    img: 'games/front-wars/cover.jpg', 
+    embed: 'https://frontwars.io/' 
+  },
+  { 
+    title: 'Drift Boss',   
+    genre: 'Racing',   
+    source: 'embed', 
+    desc: 'Drift around corners without falling off.', 
+    img: 'games/drift-boss/cover.jpg', 
+    embed: 'https://driftboss3.io/' 
+  },
+  { 
+    title: 'World Guesser',   
+    genre: 'Puzzle',   
+    source: 'embed', 
+    desc: 'Guess where in the world you are.', 
+    img: 'games/world-guesser/cover.jpg', 
+    embed: 'https://www.worldguessr.com/' 
+  },
+  { 
+    title: 'Basketball Random',   
+    genre: 'Sports',   
+    source: 'embed', 
+    desc: 'Wobbly two-player basketball.', 
+    img: 'games/basketball-random/cover.jpg', 
+    embed: 'https://gg.basketball-random.com/basketball-random/' 
+  },
+  { 
+    title: 'Basketball Stars',   
+    genre: 'Sports',   
+    source: 'embed', 
+    desc: 'One-on-one basketball with big-head players.', 
+    img: 'games/basketball-stars/cover.jpg', 
+    embed: 'https://basketball-stars.io/1.embed' 
+  },
+  { 
+    title: 'Soccer Random',   
+    genre: 'Sports',   
+    source: 'embed', 
+    desc: 'Wobbly two-player soccer.', 
+    img: 'games/soccer-random/cover.jpg', 
+    embed: 'https://gg.basketball-random.com/soccer-random/' 
+  },
+  { 
+    title: 'Boxing Random',   
+    genre: 'Sports',   
+    source: 'embed', 
+    desc: 'Wobbly two-player boxing.', 
+    img: 'games/boxing-random/cover.jpg', 
+    embed: 'https://gg.basketball-random.com/boxing-random/' 
+  },
+  { 
+    title: 'Volley Random',   
+    genre: 'Sports',   
+    source: 'embed', 
+    desc: 'Wobbly two-player volleyball.', 
+    img: 'games/volley-random/cover.jpg', 
+    embed: 'https://gg.basketball-random.com/volley-random/' 
+  }
+];
+
+const $ = id => document.getElementById(id);
+let activeGenre = 'All';
+
+function renderNav() {
+  $('genreNav').innerHTML = GENRES.map(g => `
+    <button data-genre="${g}" class="nav-btn shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-lg border border-transparent text-sm font-medium text-slate-400 hover:text-white hover:bg-white/5 transition ${g === activeGenre ? 'active' : ''}">
+      <span>${ICONS[g]}</span><span>${g}</span>
+    </button>`).join('');
+}
+
+function renderGrid() {
+  $('grid').innerHTML = GAMES.map((g, i) => `
+    <article data-play="${i}" class="game-card card-glow relative rounded-2xl overflow-hidden bg-[#151925] border border-white/5"
+             data-title="${g.title.toLowerCase()}" data-desc="${g.desc.toLowerCase()}" data-genre="${g.genre}">
+      <div class="relative aspect-[4/3] overflow-hidden bg-slate-900">
+        ${g.img
+          ? `<img class="thumb absolute inset-0 w-full h-full object-cover" src="${g.img}" alt="${g.title}" loading="lazy" onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%25\' height=\'100%25\' viewBox=\'0 0 100 100\'%3E%3Crect width=\'100\' height=\'100\' fill=\'%231e293b\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%2394a3b8\' font-size=\'12\' font-family=\'sans-serif\'%3E🎮 ${g.title}%3C/text%3E%3C/svg%3E';">`
+          : `<div class="thumb absolute inset-0 bg-gradient-to-br from-violet-600 to-slate-900 flex items-center justify-center">
+               <p class="text-2xl font-extrabold">${g.title}</p>
+             </div>`}
+        <span class="absolute top-3 left-3 text-xs font-semibold px-2 py-1 rounded-md bg-black/60 backdrop-blur">${g.genre}</span>
+        <div class="overlay absolute inset-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col justify-end p-4">
+          <p class="desc text-sm text-slate-200 mb-3">${g.desc}</p>
+          <button class="w-full py-3 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold text-sm transition">▶ Play Now</button>
+        </div>
+      </div>
+      <div class="p-4">
+        <h3 class="font-bold">${g.title}</h3>
+        <p class="text-xs text-slate-500 mt-0.5 line-clamp-2">${g.desc}</p>
+      </div>
+    </article>`).join('');
+}
+
+function applyFilters() {
+  const q = $('search').value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('.game-card').forEach(card => {
+    const matchGenre = activeGenre === 'All' || card.dataset.genre === activeGenre;
+    const matchText  = !q || card.dataset.title.includes(q) || card.dataset.desc.includes(q);
+    const ok = matchGenre && matchText;
+    card.classList.toggle('hidden', !ok);
+    if (ok) shown++;
+  });
+  $('empty').classList.toggle('hidden', shown > 0);
+  $('sectionTitle').textContent = activeGenre === 'All' ? 'All Games' : `${activeGenre} Games`;
+  $('resultCount').textContent = `${shown} game${shown === 1 ? '' : 's'}`;
+}
+
+$('genreNav').addEventListener('click', e => {
+  const btn = e.target.closest('[data-genre]');
+  if (!btn) return;
+  activeGenre = btn.dataset.genre;
+  renderNav();
+  applyFilters();
+});
+$('search').addEventListener('input', applyFilters);
+
+// Check if a local game file exists before loading iframe
+async function checkGameStatus(url) {
+  if (!url || url.startsWith('http')) return true;
+  try {
+    const res = await fetch(url, { method: 'HEAD' });
+    return res.ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+$('grid').addEventListener('click', async e => {
+  const card = e.target.closest('[data-play]');
+  if (!card) return;
+  const g = GAMES[card.dataset.play];
+  // Some games refuse to load inside other sites, so open them in their own tab
+  if (g.newTab) { window.open(g.newTab, '_blank', 'noopener'); return; }
+  current = g;
+
+  const targetUrl = g.url || g.embed;
+  $('tabBtn').classList.toggle('hidden', !isValidUrl(targetUrl));
+  $('playerTitle').textContent = g.title;
+  $('player').classList.remove('hidden');
+  lockPage(true);
+  if (TOUCH) $('panel').classList.add('full');   // on an iPad, use the whole screen for the game
+  showTip();
+
+  const frame = $('frame');
+  const fileExists = await checkGameStatus(targetUrl);
+
+  if (targetUrl && fileExists) {
+    frame.removeAttribute('srcdoc');
+    frame.src = targetUrl;
+  } else {
+    frame.removeAttribute('src');
+    frame.srcdoc = `<body style="margin:0;display:grid;place-items:center;height:100vh;background:#0b0d14;color:#94a3b8;font-family:system-ui,sans-serif;text-align:center;padding:24px">
+      <div>
+        <p style="font-size:48px;margin:0">🛠️</p>
+        <p style="font-size:20px;font-weight:700;color:#e2e8f0;margin:12px 0 6px">${g.title}</p>
+        <p style="margin:0;color:#64748b">Game files not uploaded yet. Upload the <code>${g.url || ''}</code> folder to play!</p>
+      </div>
+    </body>`;
+  }
+});
+
+let current = null;
+function openInNewTab(g) {
+  const url = g.url || g.embed;
+  if (isValidUrl(url)) window.open(url, '_blank', 'noopener');
+}
+$('tabBtn').addEventListener('click', () => { if (current) { openInNewTab(current); closePlayer(); } });
+
+function isValidUrl(u) {
+  try { const p = new URL(u, window.location.href); return p.protocol === 'https:' || p.protocol === 'http:'; } catch (_) { return false; }
+}
+
+function closePlayer() {
+  if (fullscreenElement()) exitFullscreen();
+  $('panel').classList.remove('full');
+  $('player').classList.add('hidden');
+  $('tabBtn').classList.add('hidden');
+  current = null;
+  $('frame').removeAttribute('src');
+  $('frame').srcdoc = '';
+  $('playerTip').classList.add('hidden');
+  lockPage(false);
+}
+$('closeBtn').addEventListener('click', closePlayer);
+// Clicking the dark area around the player closes it, but not on touch screens,
+// where a stray finger near the edge kept closing games by accident.
+$('player').addEventListener('click', e => { if (e.target.id === 'player' && !TOUCH) closePlayer(); });
+
+// ---------- iPad / touch screen support ----------
+// Either sign counts: iPads can claim to be a Mac, and one with a trackpad keyboard reports a fine pointer.
+const TOUCH = navigator.maxTouchPoints > 0 || matchMedia('(any-pointer: coarse)').matches;
+
+// Older iPad Safari only has the webkit-prefixed fullscreen functions.
+function fullscreenElement() { return document.fullscreenElement || document.webkitFullscreenElement; }
+function exitFullscreen() { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+
+// Stops the arcade behind a game from scrolling or bouncing when you swipe in the game
+// (iPad Safari ignores overflow:hidden for this, so the page is pinned in place instead).
+let savedScroll = 0;
+function lockPage(on) {
+  document.documentElement.classList.toggle('playing', on);
+  const b = document.body.style;
+  if (on) {
+    savedScroll = window.scrollY;
+    Object.assign(b, { overflow: 'hidden', position: 'fixed', top: -savedScroll + 'px', left: '0', right: '0' });
+  } else {
+    Object.assign(b, { overflow: '', position: '', top: '', left: '', right: '' });
+    window.scrollTo(0, savedScroll);
+  }
+}
+
+// One-line tips at the top of the game on touch screens. Tapping the tip hides it for that game.
+let tipHiddenFor = null;
+function showTip() {
+  const tip = $('playerTip');
+  let text = '';
+  if (TOUCH && current && tipHiddenFor !== current.title) {
+    if (current.keyboardOnly) text = '⌨️ ' + current.title + ' needs a keyboard and mouse. On an iPad, connect a keyboard, or pick another game.';
+    else if (innerHeight > innerWidth) text = '↻ Turn your iPad sideways for a bigger game.';
+  }
+  tip.textContent = text ? text + '  (tap to hide)' : '';
+  tip.classList.toggle('hidden', !text);
+}
+$('playerTip').addEventListener('click', () => { if (current) tipHiddenFor = current.title; showTip(); });
+addEventListener('resize', showTip);
+
+$('fsBtn').addEventListener('click', () => {
+  const p = $('panel');
+  const req = p.requestFullscreen || p.webkitRequestFullscreen;
+  if (fullscreenElement()) {
+    exitFullscreen();
+  } else if (req) {
+    Promise.resolve(req.call(p)).catch(() => p.classList.toggle('full'));
+  } else {
+    p.classList.toggle('full');
+  }
+});
+
+$('frame').addEventListener('load', () => {
+  // Give the game keyboard focus straight away, so arrow keys / WASD work without clicking in first.
+  // This has to happen outside the try: games from other sites throw on contentWindow access.
+  $('frame').focus();
+  try {
+    const w = $('frame').contentWindow;
+    w.addEventListener('keydown', onKey);
+    w.focus();
+  } catch (_) {}
+});
+
+const ARCADE = { title: document.title, icon: $('favicon').href };
+// ---------- Notes (📝 button or Esc) ----------
+// Pick a subject at the top; 📝 opens that subject's notes. Notes save to this browser as you type.
+const NOTES_ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M14 4h26l12 12v44H14z' fill='%23ffffff' stroke='%23999' stroke-width='3'/%3E%3Cpath d='M22 28h20M22 36h20M22 44h14' stroke='%23666' stroke-width='3'/%3E%3C/svg%3E";
+
+// Starting notes for each subject. Once you type in a subject, your version is saved instead.
+const SUBJECTS = {
+  'English': `Parts of a story
+- Setting: where and when the story takes place.
+- Characters: the people in the story. The main character is called the protagonist.
+- Conflict: the main problem the characters have to deal with.
+- Plot: the order of events. It builds up to the climax (the most exciting part), then the story wraps up.
+- Theme: the big message or life lesson the story is trying to show.
+
+Writing a strong paragraph
+1. Start with a topic sentence that says your main point.
+2. Give evidence, like a quote or an example from the text.
+3. Explain how that evidence backs up your point.
+4. Finish with a sentence that sums it up.`,
+
+  'Algebra': `Variables
+A letter like x stands for a number we don't know yet.
+
+Solving an equation
+Do the same thing to both sides until x is by itself.
+Example: 2x + 3 = 11
+- Subtract 3 from both sides: 2x = 8
+- Divide both sides by 2: x = 4
+
+Order of operations (PEMDAS)
+Parentheses, Exponents, Multiply and Divide (left to right), then Add and Subtract (left to right).
+
+Slope
+Slope tells you how steep a line is.
+slope = rise ÷ run = (y2 - y1) ÷ (x2 - x1)
+In y = mx + b, m is the slope and b is where the line crosses the y-axis.`,
+
+  'Biology': `Cells
+Cells are the smallest living things. Every living thing is made of one or more cells.
+- Nucleus: holds the DNA and controls the cell.
+- Cell membrane: the outer layer that controls what goes in and out.
+- Mitochondria: turn food into energy the cell can use.
+- Plant cells also have a cell wall (for support) and chloroplasts (to make food).
+
+Photosynthesis
+Plants use sunlight, water and carbon dioxide to make sugar for food. They give off oxygen as a leftover. This happens in the chloroplasts.
+
+Cellular respiration
+Cells break down sugar to get energy. This uses oxygen and gives off carbon dioxide and water. It's kind of the opposite of photosynthesis.`,
+
+  'World History': `Early civilizations
+The first big civilizations started next to rivers:
+- Mesopotamia: Tigris and Euphrates rivers
+- Egypt: Nile River
+- India: Indus River
+- China: Yellow River
+
+Why rivers?
+Rivers gave people water for crops, fish to eat, and an easy way to travel and trade.
+
+What made them "civilizations"
+- Cities and governments
+- Writing (like cuneiform in Mesopotamia and hieroglyphics in Egypt)
+- Jobs besides farming, like traders, builders and priests
+
+Study tip: for essays, think about cause and effect. What happened, and what did it lead to?`,
+
+  'Physical Science': `Matter
+Matter is anything that has mass and takes up space. The three main states are solid, liquid and gas.
+
+Atoms
+Atoms are the tiny building blocks of matter.
+- Protons: positive charge, in the center (nucleus)
+- Neutrons: no charge, also in the nucleus
+- Electrons: negative charge, moving around the outside
+
+Newton's three laws of motion
+1. Things keep doing what they're doing (staying still or moving) unless a force acts on them.
+2. Force = mass × acceleration (F = ma).
+3. Every action has an equal and opposite reaction.
+
+Speed
+speed = distance ÷ time`,
+
+  'Computer Science Java': `What a program is
+A program is a list of steps you give the computer. Java runs them one at a time, from top to bottom.
+
+Printing to the screen
+System.out.println("Hello!");
+This shows Hello! on the screen. Every statement ends with a semicolon ;
+
+Variables
+A variable is a named box that holds a value. You have to say what type it holds.
+- int age = 14;           (whole numbers)
+- double price = 4.99;    (numbers with decimals)
+- boolean done = false;   (true or false)
+- String name = "Sam";    (text, in double quotes)
+
+If statements
+Run code only when something is true:
+if (age >= 13) {
+    System.out.println("You're a teen.");
+} else {
+    System.out.println("Not a teen yet.");
+}
+
+Loops
+A for loop repeats code a set number of times:
+for (int i = 1; i <= 5; i++) {
+    System.out.println(i);
+}
+This prints 1, 2, 3, 4, 5.
+
+Common mistakes
+- Forgetting a semicolon ; at the end of a line.
+- Using = (which sets a value) when you meant == (which checks if two things are equal).
+- Java cares about capital letters: Name and name are two different variables.`
+};
+const NOTES_KEY = 'nebula-notes:';
+const SUBJECT_KEY = 'nebula-notes-subject';
+
+function store(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    localStorage.setItem(key, value);
+    return true;
+  } catch (_) { return value === undefined ? null : false; }
+}
+
+$('subject').innerHTML = Object.keys(SUBJECTS).map(name => `<option>${name}</option>`).join('');
+const savedSubject = store(SUBJECT_KEY);
+if (savedSubject in SUBJECTS) $('subject').value = savedSubject;
+// Picking a subject only remembers it; 📝 is what opens the notes.
+$('subject').addEventListener('change', () => store(SUBJECT_KEY, $('subject').value));
+
+let notesSubject = null;
+function showNotes(subject) {
+  notesSubject = subject;
+  $('notesTitle').textContent = subject + ' Notes';
+  $('notesHeading').textContent = subject;
+  const saved = store(NOTES_KEY + subject);
+  $('notesText').value = saved !== null ? saved : SUBJECTS[subject];
+  $('notesSaved').textContent = '';
+}
+
+let saveTimer;
+$('notesText').addEventListener('input', () => {
+  $('notesSaved').textContent = 'Saving…';
+  clearTimeout(saveTimer);
+  const subject = notesSubject, text = $('notesText').value;
+  saveTimer = setTimeout(() => {
+    $('notesSaved').textContent = store(NOTES_KEY + subject, text) ? 'Saved' : 'Couldn’t save (this browser blocks saving)';
+  }, 300);
+});
+// Save straight away if the page is closed or refreshed mid-typing.
+window.addEventListener('beforeunload', () => {
+  if (notesSubject) { clearTimeout(saveTimer); store(NOTES_KEY + notesSubject, $('notesText').value); }
+});
+
+let panicked = false;
+
+function setPanic(on) {
+  panicked = on;
+  if (on) { closePlayer(); showNotes($('subject').value); }
+  else if (notesSubject) { clearTimeout(saveTimer); store(NOTES_KEY + notesSubject, $('notesText').value); }
+  $('app').classList.toggle('hidden', on);
+  $('panicFab').classList.toggle('hidden', on);
+  $('decoy').classList.toggle('hidden', !on);
+  document.body.style.background = on ? '#ffffff' : '';
+  document.title = on ? notesSubject + ' Notes' : ARCADE.title;
+  $('favicon').href = on ? NOTES_ICON : ARCADE.icon;
+  window.scrollTo(0, 0);
+  if (on) $('notesText').focus();
+}
+
+function onKey(e) {
+  if (e.key === 'Escape') { e.preventDefault(); setPanic(!panicked); }
+}
+document.addEventListener('keydown', onKey);
+$('panicFab').addEventListener('click', () => setPanic(true));
+$('panicBtn').addEventListener('click', () => setPanic(true));
+$('notesBtn').addEventListener('click', () => setPanic(true));
+$('decoyBar').addEventListener('click', () => setPanic(false));
+
+renderNav();
+renderGrid();
+applyFilters();
+</script>
+
+<!-- ================= ONLINE & VISITS COUNTERS ================= -->
+<!-- GitHub Pages can't count people itself, so two free public services do it:
+     - Visits: Abacus (a free counter), +1 per visit (once per browser tab, so refreshing doesn't count again).
+     - Online: a free public MQTT server. Each open page posts "I'm here" under its own random id and
+       re-posts every 20s; when the page closes (or its connection drops) its post is cleared.
+       The count is how many ids posted recently. No names or personal details are sent. -->
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+(function () {
+  const VISITS_START = 50;   // visits shown = 50 + real visits counted
+  const VISITS_URL = 'https://abacus.jasoncameron.dev/';
+  // Testing on this computer uses separate counters, so it doesn't add to the real numbers.
+  const NS = location.hostname.endsWith('github.io') ? 'mathhw1-nebula-arcade' : 'mathhw1-nebula-arcade-test';
+  const VISITS_KEY = NS + '/visits';
+  const BROKER = 'wss://broker.emqx.io:8084/mqtt';
+  const TOPIC = NS + '/v1/online/';
+  const HEARTBEAT_MS = 20000;
+  const STALE_MS = 65000;    // someone who hasn't checked in for this long counts as gone
+
+  const $ = id => document.getElementById(id);
+  const show = (id, n) => { $(id).textContent = Number(n).toLocaleString(); };
+
+  // ----- Visits -----
+  let counted = false;
+  try { counted = sessionStorage.getItem('nebula-visit-counted') === '1'; } catch (_) {}
+  // The counter service is sometimes slow, so give each try 8 seconds and try up to 3 times.
+  async function countVisit(triesLeft) {
+    try {
+      const r = await fetch(VISITS_URL + (counted ? 'get/' : 'hit/') + VISITS_KEY, { signal: AbortSignal.timeout(8000) });
+      const d = r.status === 404 ? { value: 0 } : await r.json();   // 404 = nobody counted yet
+      if (!r.ok && r.status !== 404) throw r.status;
+      show('visitCount', VISITS_START + (d.value || 0));
+      counted = true;
+      try { sessionStorage.setItem('nebula-visit-counted', '1'); } catch (_) {}
+    } catch (_) {
+      if (triesLeft > 1) setTimeout(() => countVisit(triesLeft - 1), 2000);
+      else $('visitCount').textContent = '—';
+    }
+  }
+  countVisit(3);
+
+  // ----- Currently online -----
+  if (!window.mqtt) { $('onlineCount').textContent = '—'; return; }
+  const myId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  const myTopic = TOPIC + myId;
+  const seen = new Map();   // id -> when we last heard from them
+
+  const client = mqtt.connect(BROKER, {
+    clientId: 'nebula-' + myId,
+    clean: true,
+    keepalive: 30,
+    reconnectPeriod: 5000,
+    // If this page vanishes without saying goodbye, the server clears our post for us.
+    will: { topic: myTopic, payload: '', retain: true, qos: 0 }
+  });
+
+  function hello() { client.publish(myTopic, String(Date.now()), { retain: true }); }
+  function render() {
+    const now = Date.now();
+    for (const [id, t] of seen) if (now - t > STALE_MS) seen.delete(id);
+    seen.set(myId, now);    // you're always online yourself
+    show('onlineCount', seen.size);
+  }
+
+  client.on('connect', () => {
+    client.subscribe(TOPIC + '+');
+    hello();
+    render();
+  });
+  client.on('message', (topic, payload, packet) => {
+    const id = topic.slice(TOPIC.length);
+    const text = payload.toString();
+    if (!text) { seen.delete(id); render(); return; }
+    // Saved posts from before we arrived carry the time they were made; ignore old leftovers.
+    const t = packet.retain ? Number(text) : Date.now();
+    if (Date.now() - t < STALE_MS) seen.set(id, t); else seen.delete(id);
+    render();
+  });
+  client.on('error', () => {});
+
+  setInterval(() => { if (client.connected) hello(); render(); }, HEARTBEAT_MS);
+  setInterval(render, 5000);
+  render();
+
+  // Say goodbye straight away when the page is closed, so the count drops at once.
+  window.addEventListener('pagehide', () => {
+    if (client.connected) client.publish(myTopic, '', { retain: true });
+    client.end(true);
+  });
+})();
+</script>
+</body>
+</html>
