@@ -21,6 +21,12 @@ const NebulaScores = (function () {
             { id: 'wheelie:miles', name: 'Total Miles', show: n => (n / 100).toFixed(2) + ' mi' },
             { id: 'wheelie:time', name: 'Fastest Mile', show: minutes, lower: true }
         ] },
+        { id: 'tunnel', name: '🌀 Neon Tunnel', boards: [
+            { id: 'tunnel:score', name: 'High Score', show: n => n.toLocaleString() },
+            { id: 'tunnel:level', name: 'Highest Level', show: n => 'Level ' + n + ' of 50' },
+            { id: 'tunnel:distance', name: 'Farthest', show: n => n.toLocaleString() },
+            { id: 'tunnel:time', name: 'Longest Run', show: minutes }
+        ] },
         { id: 'racing', name: '🏎️ Tiny Turbo', boards: [{ id: 'racing:time', name: 'Fastest Race', show: minutes, lower: true }] },
         { id: 'chess', name: '♟️ Chess', boards: [{ id: 'chess:elo', name: 'ELO Rating', show: n => n.toLocaleString() }] },
         { id: 'pool', name: '🎱 Pool', boards: [{ id: 'pool:wins', name: 'Online Wins', show: n => n + ' · ' + poolRank(n) }] }

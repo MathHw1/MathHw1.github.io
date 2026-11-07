@@ -33,8 +33,6 @@ const GHOST_MOST_BEHIND = 40;      // how far the ghost can drift from that spot
 const GHOST_MOST_AHEAD = 30;       // and it never rides out in front of you, where it would hide the road
 const GHOST_SPACING = 30;           // each extra ghost sits this much further back
 const LEADERBOARD_GAME = 'wheelie';
-const THUMB_KEY = 'wheelie_life_thumb';
-const THUMB_SECONDS = 1.5;         // how far into a ride the arcade card's picture is taken
 const RACE_GAME_OVER_SECONDS = 1.5;
 
 const METRES_PER_MILE = 1609.344;
@@ -1168,7 +1166,7 @@ function updateHud() {
 
 // ---------- Main loop ----------
 
-let last = performance.now(), spare = 0, thumbTaken = false;
+let last = performance.now(), spare = 0;
 
 function frame(now) {
     requestAnimationFrame(frame);
@@ -1235,10 +1233,6 @@ function frame(now) {
         }
     }
     render();
-    if (!thumbTaken && screen === 'riding' && state.rider.time >= THUMB_SECONDS) {
-        thumbTaken = true;
-        saveThumbnail(canvas, THUMB_KEY, BIKE_X + 0.05);
-    }
 }
 
 // ---------- Controls ----------

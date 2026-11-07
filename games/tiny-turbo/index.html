@@ -515,7 +515,6 @@ $('mute').onclick=()=>{initAudio();setMute(!save.muted);};
 setMute(save.muted);
 
 /* ---------------- online ---------------- */
-const THUMB_KEY='tiny_turbo_thumb',THUMB_SECONDS=1.5;let thumbTaken=false;   // the arcade card's picture
 const GHOST_OPACITY=.38,SEND_EVERY=.1,GHOST_FOLLOW=12;
 const NEW_STATS={races:0,wins:0,losses:0};
 function recordRace(){
@@ -964,7 +963,6 @@ function loop(now){
   if(player)setEngine(player.speed,state==='race'||state==='finishing'||state==='countdown');
   if(state==='race'||state==='finishing')drawGraph();
   renderer.render(scene,camera);
-  if(!thumbTaken&&state==='race'&&raceT>=THUMB_SECONDS){thumbTaken=true;saveThumbnail(renderer.domElement,THUMB_KEY);}
 }
 refreshMenu();setupGrid();camera.fov=60;camera.updateProjectionMatrix();
 requestAnimationFrame(loop);
