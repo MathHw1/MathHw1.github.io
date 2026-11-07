@@ -1,59 +1,83 @@
 "use strict";
 
 // Wheelie Life: an original wheelie game for Nebula Arcade. The bike's physics are in physics.js.
-// This file handles the road, coins, missions, garage, drawing and controls.
+// This file handles the road, cash, boosts, missions, garage, drawing and controls.
 
 const $ = id => document.getElementById(id);
 const P = WheeliePhysics;
 const STEP = 1 / 120;
-const SAVE_KEY = 'nebula-wheelie-save';
+const SAVE_KEY = 'wheelie-life-save';
+const OLD_SAVE_KEY = 'nebula-wheelie-save';
+const COINS_PER_DOLLAR = 10;       // old saves swap their coins for cash at this rate
 const PIXELS_PER_METRE = 26;
 const VIEW_HEIGHT = 540;           // the game is drawn in this many units tall, then scaled to the screen
-const BIKE_X = 0.3;                // where the bike sits across the screen
-const BUMP_REWARD = 40;
+const BIKE_X = 0.27;               // where the bike sits across the screen
 const FRONT_REACH = 1.4;           // metres from the rider to the front wheel
-const MAGNET_RANGE = 3;            // extra metres per magnet level
 const THEME_EVERY = 400;           // metres between scenery changes
-const FIRST_BUMP = 90;             // gives new riders time to learn the wheelie
+const FIRST_OBSTACLE = 90;         // gives new riders time to learn the wheelie
+const CLEAR_REWARD = 50;
+const LOOK_AHEAD = 70;             // metres of road laid out in front of you
+const INK = '#14161f';             // the thick cartoon outline colour
 
-const BIKES = [
-    { id: 'ember', name: 'Ember', color: '#f97316', cost: 0 },
-    { id: 'ocean', name: 'Ocean', color: '#0ea5e9', cost: 150 },
-    { id: 'toxic', name: 'Toxic', color: '#84cc16', cost: 300 },
-    { id: 'nebula', name: 'Nebula', color: '#c026d3', cost: 600 }
+// Cash floats at a set height, so you have to ride at the right angle to reach it.
+const CASH_HIGH_ANGLE = 62;        // high bills need the wheel at least this far up
+const CASH_LOW_ANGLE = 38;         // low bills need it at most this far up
+const MAGNET_ANGLE = 6;            // each Cash Magnet level makes those heights easier
+const DOUBLE_CASH_METRES = 300;
+const NITRO_METRES = 200;
+
+const VEHICLES = [
+    { id: 'dirt', kind: 'bike', name: 'Dirt Bike', cost: 0, color: '#f97316', about: 'Your first ride.' },
+    { id: 'street', kind: 'bike', name: 'Street Bike', cost: 400, color: '#2563eb', about: 'Faster, with 10% more points.', torque: 1.05, speed: 3, score: 1.1 },
+    { id: 'chopper', kind: 'bike', name: 'Chopper', cost: 900, color: '#a21caf', about: 'Heavy and steady. Hard to flip.', torque: 0.97, flip: 6, zone: 3, score: 1.15 },
+    { id: 'rocket', kind: 'bike', name: 'Rocket Bike', cost: 2000, color: '#dc2626', about: 'Very fast, with 25% more points.', torque: 1.12, speed: 6, score: 1.25 },
+    { id: 'muscle', kind: 'car', name: 'Muscle Car', cost: 3500, color: '#eab308', about: 'A car on its back wheels! 40% more points.', torque: 1.05, flip: 8, zone: 4, speed: 3, score: 1.4 },
+    { id: 'monster', kind: 'truck', name: 'Monster Truck', cost: 7500, color: '#16a34a', about: 'The steadiest ride, with 75% more points.', torque: 1.02, flip: 10, zone: 6, speed: 2, score: 1.75 }
 ];
 const UPGRADES = [
-    { id: 'engine', name: 'Engine', about: 'Lifts the front wheel faster.', costs: [100, 250, 500] },
-    { id: 'grip', name: 'Balance', about: 'Wider green zone and harder to flip.', costs: [120, 300, 600] },
-    { id: 'magnet', name: 'Coin Magnet', about: 'Pulls in coins from further away.', costs: [80, 200, 400] }
+    { id: 'engine', name: 'Engine', about: 'Lifts the front wheel faster.', costs: [150, 400, 900] },
+    { id: 'grip', name: 'Balance', about: 'Wider green zone and harder to flip.', costs: [200, 500, 1100] },
+    { id: 'magnet', name: 'Cash Magnet', about: 'Makes floating cash easier to reach.', costs: [120, 350, 800] }
+];
+// Bought in the garage, then used up automatically at the start of your next run.
+const START_BOOSTS = [
+    { id: 'shield', name: 'Shield', about: 'Saves you from one crash.', cost: 75 },
+    { id: 'nitro', name: 'Nitro Start', about: 'Double points for your first 200m.', cost: 50 }
 ];
 const THEMES = [
-    { name: 'Sunset Boulevard', top: '#ff7e5f', bottom: '#feb47b', far: '#c8553d', near: '#7a3b4e', ground: '#3a3f55' },
-    { name: 'Neon City', top: '#120458', bottom: '#7a04eb', far: '#2d0a6b', near: '#ff2a6d', ground: '#1a1a2e' },
-    { name: 'Ocean Drive', top: '#38bdf8', bottom: '#bae6fd', far: '#0ea5e9', near: '#0369a1', ground: '#475569' },
-    { name: 'Deep Space', top: '#020617', bottom: '#312e81', far: '#4338ca', near: '#1e1b4b', ground: '#1e293b' }
+    { name: 'Ocean Drive', top: '#4cc4f4', bottom: '#b9ecfb', sea: '#1aa7d8', far: '#37b6e0', near: '#1787b5', ground: '#4a5060' },
+    { name: 'Sunset Boulevard', top: '#ff7e5f', bottom: '#feb47b', sea: '#d9694e', far: '#c8553d', near: '#7a3b4e', ground: '#3a3f55' },
+    { name: 'Neon City', top: '#120458', bottom: '#7a04eb', sea: '#3b0aa8', far: '#2d0a6b', near: '#ff2a6d', ground: '#1a1a2e' },
+    { name: 'Deep Space', top: '#020617', bottom: '#312e81', sea: '#1e1b4b', far: '#4338ca', near: '#1e1b4b', ground: '#1e293b' }
 ];
 // value() reads this run's stats; missions stay until they're finished.
 const MISSIONS = [
     { id: 'ride300', text: 'Ride 300m in one run', goal: 300, reward: 40, value: s => s.rider.distance },
     { id: 'mult3', text: 'Reach a ×3 multiplier', goal: 3, reward: 50, value: s => s.rider.bestMultiplier },
-    { id: 'bumps5', text: 'Clear 5 bumps in one run', goal: 5, reward: 60, value: s => s.bumps },
-    { id: 'coins25', text: 'Grab 25 coins in one run', goal: 25, reward: 50, value: s => s.coins },
-    { id: 'zone20', text: 'Stay in the green zone for 20 seconds', goal: 20, reward: 70, value: s => s.rider.totalZoneTime },
-    { id: 'mult5', text: 'Reach a ×5 multiplier', goal: 5, reward: 120, value: s => s.rider.bestMultiplier },
-    { id: 'ride1000', text: 'Ride 1000m in one run', goal: 1000, reward: 150, value: s => s.rider.distance },
-    { id: 'score5000', text: 'Score 5,000 in one run', goal: 5000, reward: 200, value: s => s.rider.score },
-    { id: 'bumps20', text: 'Clear 20 bumps in one run', goal: 20, reward: 180, value: s => s.bumps }
+    { id: 'clear5', text: 'Clear 5 barriers or beams in one run', goal: 5, reward: 75, value: s => s.cleared },
+    { id: 'cash20', text: 'Grab $20 in one run', goal: 20, reward: 60, value: s => s.cash },
+    { id: 'zone20', text: 'Stay in the green zone for 20 seconds', goal: 20, reward: 90, value: s => s.rider.totalZoneTime },
+    { id: 'mult5', text: 'Reach a ×5 multiplier', goal: 5, reward: 150, value: s => s.rider.bestMultiplier },
+    { id: 'ride1000', text: 'Ride 1000m in one run', goal: 1000, reward: 200, value: s => s.rider.distance },
+    { id: 'score5000', text: 'Score 5,000 in one run', goal: 5000, reward: 250, value: s => s.rider.score },
+    { id: 'clear20', text: 'Clear 20 barriers or beams in one run', goal: 20, reward: 300, value: s => s.cleared },
+    { id: 'ride3000', text: 'Ride 3000m in one run', goal: 3000, reward: 800, value: s => s.rider.distance }
 ];
 
 // ---------- Saving ----------
 
+function readJson(key) {
+    try { return JSON.parse(localStorage.getItem(key)); } catch (_) { return null; }
+}
+
 function load() {
-    const fresh = { best: 0, coins: 0, bike: 'ember', owned: ['ember'], upgrades: { engine: 0, grip: 0, magnet: 0 }, done: [], sound: true };
-    try {
-        const saved = JSON.parse(localStorage.getItem(SAVE_KEY));
-        if (saved) return { ...fresh, ...saved, upgrades: { ...fresh.upgrades, ...saved.upgrades } };
-    } catch (_) {}
+    const fresh = { best: 0, cash: 0, vehicle: 'dirt', owned: ['dirt'], upgrades: { engine: 0, grip: 0, magnet: 0 }, boosts: { shield: 0, nitro: 0 }, done: [], sound: true };
+    const saved = readJson(SAVE_KEY);
+    if (saved) return { ...fresh, ...saved, upgrades: { ...fresh.upgrades, ...saved.upgrades }, boosts: { ...fresh.boosts, ...saved.boosts } };
+
+    // Players from before cash keep their score and upgrades, and their coins become cash.
+    const old = readJson(OLD_SAVE_KEY);
+    if (old) return { ...fresh, best: old.best || 0, cash: Math.floor((old.coins || 0) / COINS_PER_DOLLAR), upgrades: { ...fresh.upgrades, ...old.upgrades }, sound: old.sound !== false };
     return fresh;
 }
 const save = load();
@@ -61,6 +85,8 @@ function store() {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (_) {}
 }
 const activeMissions = () => MISSIONS.filter(m => !save.done.includes(m.id)).slice(0, 3);
+const myVehicle = () => VEHICLES.find(v => v.id === save.vehicle) || VEHICLES[0];
+const money = n => '$' + Math.floor(n).toLocaleString();
 
 // ---------- Sound ----------
 
@@ -98,94 +124,119 @@ const sound = {
 
 // ---------- A run ----------
 
-const input = { gas: false, brake: false, lock: false };
+const input = { gas: false, brake: false };
 let state = null;        // the current ride
 let screen = 'menu';     // menu, riding, paused or over
 
-function newRun(startLocked) {
+function newRun() {
     input.gas = input.brake = false;
-    input.lock = !!startLocked;
+    const rider = P.newRider(myVehicle(), save.upgrades);
+    if (save.boosts.shield > 0) { save.boosts.shield--; rider.shields = 1; }
+    if (save.boosts.nitro > 0) { save.boosts.nitro--; rider.nitroUntil = NITRO_METRES; }
+    store();
     state = {
-        rider: P.newRider(save.upgrades),
-        coins: 0, bumps: 0, things: [], nextThing: 45, nextBump: FIRST_BUMP,
-        theme: 0, messageUntil: 0, doneThisRun: [], taught: false, shake: 0
+        rider, cash: 0, cleared: 0, things: [], nextCash: 60, nextObstacle: FIRST_OBSTACLE, nextPower: 180,
+        theme: 0, doneThisRun: [], shake: 0, cashDoubleUntil: 0
     };
-    $('lockBtn').classList.toggle('on', input.lock);
     show('riding');
-    say(input.lock ? 'Cruise mode: enjoy the ride' : 'Hold GAS to lift your wheel!', 2200);
+    say('Hold GAS! Don’t let the wheel touch down', 2400);
     sound.start();
 }
 
-// Lays out the road ahead: rows and arcs of coins, plus bumps that get closer together as you go.
+// Lays out the road ahead. Obstacles get closer together, but cash stays rare.
 function spawn() {
-    const s = state, d = s.rider.distance, ahead = d + 60;
-    while (s.nextThing < ahead) {
-        const count = 4 + Math.floor(Math.random() * 5), arc = Math.random() < 0.5;
-        for (let i = 0; i < count; i++) {
-            const lift = arc ? Math.sin(i / (count - 1) * Math.PI) * 2.2 : 0.6;
-            s.things.push({ type: 'coin', x: s.nextThing + i * 1.7, y: 0.9 + lift });
-        }
-        s.nextThing += 22 + Math.random() * 30;
+    const s = state, ahead = s.rider.distance + LOOK_AHEAD;
+    while (s.nextObstacle < ahead) {
+        const types = s.nextObstacle < 250 ? ['barrier', 'beam'] : Object.keys(P.OBSTACLES);
+        s.things.push({ kind: 'obstacle', type: types[Math.floor(Math.random() * types.length)], x: s.nextObstacle });
+        s.nextObstacle += Math.max(30, 70 - s.nextObstacle / 40) + Math.random() * 26;
     }
-    while (s.nextBump < ahead) {
-        s.things.push({ type: 'bump', x: s.nextBump });
-        s.nextBump += Math.max(24, 62 - s.nextBump / 45) + Math.random() * 26;
+    while (s.nextCash < ahead) {
+        const high = Math.random() < 0.5, roll = Math.random();
+        s.things.push({ kind: 'cash', high, x: s.nextCash, value: roll < 0.08 ? 25 : roll < 0.4 ? 10 : 5 });
+        s.nextCash += 90 + Math.random() * 90;
+    }
+    while (s.nextPower < ahead) {
+        const type = ['shield', 'nitro', 'double'][Math.floor(Math.random() * 3)];
+        s.things.push({ kind: 'power', type, x: s.nextPower });
+        s.nextPower += 240 + Math.random() * 220;
     }
 }
 
-function collect() {
+function grabCash(t) {
+    const s = state, r = s.rider, help = MAGNET_ANGLE * save.upgrades.magnet;
+    if (t.high ? r.angle < CASH_HIGH_ANGLE - help : r.angle > CASH_LOW_ANGLE + help) return;
+    const value = t.value * (r.distance < s.cashDoubleUntil ? 2 : 1);
+    s.cash += value;
+    say('+' + money(value), 700);
+    sound.beep(980, 0.1);
+}
+
+function grabPower(t) {
+    const s = state, r = s.rider;
+    if (t.type === 'shield') { r.shields++; say('🛡️ Shield ready!', 1000); }
+    if (t.type === 'nitro') { r.nitroUntil = r.distance + NITRO_METRES; say('🔥 Nitro! Double points', 1000); }
+    if (t.type === 'double') { s.cashDoubleUntil = r.distance + DOUBLE_CASH_METRES; say('💵 Double cash!', 1000); }
+    sound.beep(1200, 0.2);
+}
+
+function meetThings() {
     const s = state, r = s.rider, front = r.distance + FRONT_REACH;
-    const reach = 2 + MAGNET_RANGE * save.upgrades.magnet;
     s.things = s.things.filter(t => {
-        if (t.type === 'coin') {
-            if (t.x > r.distance - 1 && t.x < r.distance + reach) {
-                s.coins++;
-                sound.beep(980, 0.08);
-                return false;
+        if (t.kind === 'obstacle' && !t.warned && t.x - front < r.speed * 1.6) {
+            t.warned = true;
+            say(P.OBSTACLES[t.type].hint, 900);
+        }
+        if (t.x > front) return true;
+        if (t.kind === 'cash') grabCash(t);
+        else if (t.kind === 'power') grabPower(t);
+        else {
+            const needsSkill = t.type === 'barrier' || t.type === 'beam';
+            if (P.meetObstacle(r, t.type) && needsSkill && !r.crashed) {
+                s.cleared++;
+                r.score += CLEAR_REWARD * r.multiplier;
+                say('+' + CLEAR_REWARD * r.multiplier + ' cleared!', 600);
             }
         }
-        else if (t.x <= front) {
-            if (input.lock || r.angle >= P.CLEAR_ANGLE) {
-                s.bumps++;
-                if (!input.lock) { r.score += BUMP_REWARD * r.multiplier; say('+' + BUMP_REWARD * r.multiplier + ' cleared!', 700); }
-            }
-            else r.crashed = 'bump';
-            return false;
-        }
-        return t.x > r.distance - 30;
+        return false;
     });
 }
 
 function checkMissions() {
-    if (input.lock) return;
     for (const m of activeMissions()) {
         if (m.value(state) >= m.goal) {
             save.done.push(m.id);
-            save.coins += m.reward;
+            save.cash += m.reward;
             state.doneThisRun.push(m);
             store();
             sound.beep(1320, 0.3);
-            say('Mission done! +' + m.reward + ' coins', 1500);
+            say('Mission done! +' + money(m.reward), 1500);
         }
     }
 }
 
+const CRASH_TEXT = {
+    ground: ['Your wheel hit the ground!', 'Keep the gas on and don’t let the front wheel touch down.'],
+    flip: ['You flipped over!', 'Tap the brake to bring the front wheel down.'],
+    stall: ['You never lifted the wheel!', 'Hold GAS right away to get into a wheelie.'],
+    barrier: ['You hit a barrier!', 'Get your wheel high before you reach a barrier.'],
+    beam: ['You hit a low beam!', 'Bring your wheel down to fit under a beam.']
+};
+
 function endRun() {
-    const s = state, r = s.rider;
-    save.coins += s.coins;
+    const s = state, r = s.rider, text = CRASH_TEXT[r.crashed] || CRASH_TEXT.ground;
+    save.cash += s.cash;
     const newBest = r.score > save.best;
     if (newBest) save.best = Math.floor(r.score);
     store();
     sound.silence();
     sound.beep(120, 0.5);
     s.shake = 18;
-    $('overTitle').textContent = r.crashed === 'flip' ? 'You flipped over!' : r.crashed === 'bump' ? 'You hit a bump!' : 'Nice ride!';
-    $('overText').textContent = newBest && r.score > 0 ? '🏆 New best score!' :
-        r.crashed === 'flip' ? 'Tap the brake to bring the front wheel down.' :
-        r.crashed === 'bump' ? 'Keep your front wheel up to ride over bumps.' : '';
+    $('overTitle').textContent = text[0];
+    $('overText').textContent = newBest && r.score > 0 ? '🏆 New best score!' : text[1];
     $('overScore').textContent = Math.floor(r.score).toLocaleString();
     $('overDist').textContent = Math.floor(r.distance) + 'm';
-    $('overCoins').textContent = '+' + s.coins;
+    $('overCash').textContent = '+' + money(s.cash);
     fillMissions($('overMissions'), s.doneThisRun);
     show('over');
 }
@@ -195,14 +246,8 @@ function endRun() {
 function show(name) {
     screen = name;
     const riding = name === 'riding';
-    $('menu').classList.toggle('hidden', name !== 'menu');
-    $('garage').classList.toggle('hidden', name !== 'garage');
-    $('paused').classList.toggle('hidden', name !== 'paused');
-    $('over').classList.toggle('hidden', name !== 'over');
-    $('hud').classList.toggle('hidden', !riding);
-    $('mission').classList.toggle('hidden', !riding);
-    $('gasBtn').classList.toggle('hidden', !riding || input.lock);
-    $('brakeBtn').classList.toggle('hidden', !riding || input.lock);
+    for (const id of ['menu', 'garage', 'paused', 'over']) $(id).classList.toggle('hidden', name !== id);
+    for (const id of ['hud', 'mission', 'gasBtn', 'brakeBtn', 'boostChips']) $(id).classList.toggle('hidden', !riding);
     if (!riding) { input.gas = input.brake = false; sound.silence(); }
     $('gasBtn').classList.remove('down');
     $('brakeBtn').classList.remove('down');
@@ -216,23 +261,30 @@ function fillMissions(list, finished) {
     finished.forEach(m => {
         const item = document.createElement('li');
         item.className = 'done';
-        item.textContent = '✓ ' + m.text + ' (+' + m.reward + ')';
+        item.textContent = '✓ ' + m.text + ' (+' + money(m.reward) + ')';
         list.appendChild(item);
     });
     activeMissions().forEach(m => {
         const item = document.createElement('li');
-        item.textContent = '○ ' + m.text + ' (+' + m.reward + ')';
+        item.textContent = '○ ' + m.text + ' (+' + money(m.reward) + ')';
         list.appendChild(item);
     });
 }
 
 function fillMenu() {
     $('menuBest').textContent = save.best.toLocaleString();
-    $('menuCoins').textContent = save.coins.toLocaleString();
+    $('menuCash').textContent = money(save.cash);
+    $('menuRide').textContent = myVehicle().name;
     fillMissions($('menuMissions'), []);
 }
 
-function buyLine(title, about, buttonText, disabled, action, color) {
+function shopHeading(text) {
+    const heading = document.createElement('h3');
+    heading.textContent = text;
+    $('shop').appendChild(heading);
+}
+
+function shopLine(title, about, buttonText, disabled, action, color) {
     const row = document.createElement('div');
     row.className = 'shop-item';
     const text = document.createElement('div');
@@ -256,25 +308,32 @@ function buyLine(title, about, buttonText, disabled, action, color) {
 }
 
 function fillGarage() {
-    $('garageCoins').textContent = save.coins.toLocaleString();
+    $('garageCash').textContent = money(save.cash);
     $('shop').textContent = '';
-    const pay = cost => { save.coins -= cost; store(); fillGarage(); };
+    const pay = cost => { save.cash -= cost; store(); fillGarage(); };
 
+    shopHeading('Vehicles');
+    VEHICLES.forEach(v => {
+        const owned = save.owned.includes(v.id), riding = save.vehicle === v.id;
+        shopLine(v.name, v.about, riding ? 'Riding' : owned ? 'Ride' : money(v.cost), riding || (!owned && save.cash < v.cost), () => {
+            if (!owned) save.owned.push(v.id);
+            save.vehicle = v.id;
+            pay(owned ? 0 : v.cost);
+        }, v.color);
+    });
+
+    shopHeading('Upgrades');
     UPGRADES.forEach(u => {
         const level = save.upgrades[u.id], cost = u.costs[level];
-        buyLine(u.name + ' (level ' + level + '/' + u.costs.length + ')', u.about,
-            cost === undefined ? 'Maxed' : cost + ' coins', cost === undefined || save.coins < cost,
+        shopLine(u.name + ' (level ' + level + '/' + u.costs.length + ')', u.about,
+            cost === undefined ? 'Maxed' : money(cost), cost === undefined || save.cash < cost,
             () => { save.upgrades[u.id]++; pay(cost); });
     });
-    BIKES.forEach(b => {
-        const owned = save.owned.includes(b.id), riding = save.bike === b.id;
-        buyLine(b.name, owned ? 'Your bike' : 'New paint job', riding ? 'Riding' : owned ? 'Ride' : b.cost + ' coins',
-            riding || (!owned && save.coins < b.cost),
-            () => {
-                if (!owned) save.owned.push(b.id);
-                save.bike = b.id;
-                pay(owned ? 0 : b.cost);
-            }, b.color);
+
+    shopHeading('Boosts for your next run');
+    START_BOOSTS.forEach(b => {
+        shopLine(b.name + ' (you have ' + save.boosts[b.id] + ')', b.about, money(b.cost), save.cash < b.cost,
+            () => { save.boosts[b.id]++; pay(b.cost); });
     });
 }
 
@@ -285,15 +344,6 @@ function say(text, ms) {
     box.classList.add('show');
     clearTimeout(messageTimer);
     messageTimer = setTimeout(() => box.classList.remove('show'), ms);
-}
-
-function setLock(on) {
-    input.lock = on;
-    input.gas = input.brake = false;
-    $('lockBtn').classList.toggle('on', on);
-    $('gasBtn').classList.toggle('hidden', on);
-    $('brakeBtn').classList.toggle('hidden', on);
-    if (screen === 'riding') say(on ? '🔒 Locked: just cruise' : 'You’re in control!', 1200);
 }
 
 function pause() { if (screen === 'riding') show('paused'); }
@@ -311,131 +361,224 @@ function resize() {
     viewWidth = canvas.width / scale;
 }
 
-function skyline(colour, spacing, height, speed, offset) {
-    ctx.fillStyle = colour;
-    const shift = (offset * speed) % spacing;
-    for (let x = -spacing - shift, i = Math.floor(offset * speed / spacing); x < viewWidth + spacing; x += spacing, i++) {
-        const tall = height * (0.55 + 0.45 * Math.abs(Math.sin(i * 12.9)));
-        ctx.fillRect(x, 400 - tall, spacing * 0.72, tall);
-    }
+// Draws a filled shape with the thick cartoon outline from the Wheelie Life picture.
+function shape(fill, outline, draw) {
+    ctx.beginPath();
+    draw();
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (outline) { ctx.strokeStyle = INK; ctx.lineWidth = outline; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke(); }
 }
+const circle = (x, y, r) => ctx.arc(x, y, r, 0, Math.PI * 2);
+const line = (points) => points.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
 
 function drawWorld(distance, themeIndex) {
     const t = THEMES[themeIndex % THEMES.length];
-    const sky = ctx.createLinearGradient(0, 0, 0, 400);
+    const sky = ctx.createLinearGradient(0, 0, 0, 290);
     sky.addColorStop(0, t.top);
     sky.addColorStop(1, t.bottom);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, viewWidth, VIEW_HEIGHT);
-    ctx.fillStyle = 'rgba(255,255,255,.75)';
-    ctx.beginPath();
-    ctx.arc(viewWidth * 0.78, 95, 40, 0, Math.PI * 2);
-    ctx.fill();
 
-    skyline(t.far, 90, 170, 5, distance);
-    skyline(t.near, 130, 110, 12, distance);
+    // Sea with a far island, then the guard rail and road, like the picture
+    ctx.fillStyle = t.far;
+    const island = (distance * 3) % (viewWidth + 400);
+    ctx.beginPath();
+    ctx.ellipse(viewWidth + 200 - island, 292, 180, 30, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = t.sea;
+    ctx.fillRect(0, 290, viewWidth, 65);
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    for (let x = -((distance * 6) % 170); x < viewWidth; x += 170) ctx.fillRect(x, 318, 62, 4);
+
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(0, 355, viewWidth, 12);
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(0, 372, viewWidth, 9);
+    ctx.fillStyle = INK;
+    for (let x = -(distance * PIXELS_PER_METRE % 150); x < viewWidth; x += 150) ctx.fillRect(x, 352, 9, 48);
+    ctx.fillRect(0, 353, viewWidth, 3);
+    ctx.fillRect(0, 367, viewWidth, 3);
+
     ctx.fillStyle = t.ground;
     ctx.fillRect(0, 400, viewWidth, 140);
-    ctx.fillStyle = 'rgba(255,255,255,.75)';
-    for (let x = -(distance * PIXELS_PER_METRE % 110); x < viewWidth; x += 110) ctx.fillRect(x, 470, 58, 7);
+    ctx.fillStyle = INK;
+    ctx.fillRect(0, 398, viewWidth, 4);
+    ctx.fillStyle = '#facc15';
+    for (let x = -(distance * PIXELS_PER_METRE % 110); x < viewWidth; x += 110) ctx.fillRect(x, 482, 60, 7);
+}
+
+function drawObstacle(t, x) {
+    const road = 442;
+    if (t.type === 'barrier') {
+        shape('#fff', 4, () => ctx.rect(x - 8, road - 54, 18, 54));
+        ctx.fillStyle = '#dc2626';
+        for (let y = road - 50; y < road - 4; y += 18) ctx.fillRect(x - 6, y, 14, 9);
+        shape('#facc15', 4, () => ctx.rect(x - 24, road - 8, 50, 8));
+    }
+    else if (t.type === 'beam') {
+        shape('#6b7280', 4, () => ctx.rect(x - 8, 215, 16, road - 215));
+        shape('#f59e0b', 5, () => ctx.rect(x - 70, 305, 140, 28));
+        ctx.fillStyle = INK;
+        for (let i = -56; i < 60; i += 34) {
+            ctx.beginPath();
+            line([[x + i, 307], [x + i + 14, 307], [x + i + 2, 331], [x + i - 12, 331]]);
+            ctx.fill();
+        }
+    }
+    else if (t.type === 'pothole') {
+        shape('#0b0d14', 4, () => ctx.ellipse(x, road + 1, 34, 9, 0, 0, Math.PI * 2));
+    }
+    else if (t.type === 'crack') {
+        shape(null, 6, () => line([[x - 26, road - 2], [x - 12, road + 6], [x - 4, road - 3], [x + 8, road + 8], [x + 24, road]]));
+    }
+    else {
+        ctx.fillStyle = 'rgba(8,9,14,.9)';
+        ctx.beginPath();
+        ctx.ellipse(x + 60, road + 3, 112, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(147,51,234,.55)';
+        ctx.beginPath();
+        ctx.ellipse(x + 40, road + 1, 34, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function drawCash(t, x) {
+    const y = t.high ? 300 : 352;
+    shape('#22c55e', 4, () => ctx.roundRect(x - 27, y - 15, 54, 30, 4));
+    ctx.fillStyle = '#dcfce7';
+    ctx.font = 'bold 20px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('$' + t.value, x, y + 1);
+}
+
+function drawPower(t, x) {
+    const icon = { shield: '🛡️', nitro: '🔥', double: '💵' }[t.type];
+    shape('rgba(255,255,255,.85)', 4, () => circle(x, 322, 25));
+    ctx.font = '27px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(icon, x, 324);
 }
 
 function drawThings(s) {
     const bikeX = viewWidth * BIKE_X;
     for (const t of s.things) {
         const x = bikeX + (t.x - s.rider.distance) * PIXELS_PER_METRE;
-        if (x < -40 || x > viewWidth + 40) continue;
-        if (t.type === 'coin') {
-            const y = 430 - t.y * PIXELS_PER_METRE;
-            ctx.fillStyle = '#facc15';
-            ctx.strokeStyle = '#a16207';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(x, y, 11, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-        }
-        else {
-            ctx.fillStyle = '#facc15';
-            ctx.beginPath();
-            ctx.moveTo(x - 32, 432);
-            ctx.quadraticCurveTo(x, 400, x + 32, 432);
-            ctx.fill();
-            ctx.fillStyle = '#1f2937';
-            for (let i = -16; i <= 12; i += 14) ctx.fillRect(x + i, 418, 6, 12);
-        }
+        if (x < -130 || x > viewWidth + 130) continue;
+        if (t.kind === 'cash') drawCash(t, x);
+        else if (t.kind === 'power') drawPower(t, x);
+        else drawObstacle(t, x);
     }
 }
 
-function wheel(x, y, radius, spin) {
-    ctx.fillStyle = '#111827';
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#9ca3af';
-    ctx.beginPath();
-    ctx.arc(x, y, radius * 0.55, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#111827';
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 3; i++) {
-        const a = spin + i * Math.PI / 3;
+function wheel(x, y, radius, spin, big) {
+    shape('#1c1f2b', 5, () => circle(x, y, radius));
+    ctx.fillStyle = INK;
+    for (let i = 0; i < (big ? 12 : 16); i++) {      // chunky tyre knobs
+        const a = spin + i * Math.PI * 2 / (big ? 12 : 16);
         ctx.beginPath();
-        ctx.moveTo(x - Math.cos(a) * radius * 0.55, y - Math.sin(a) * radius * 0.55);
-        ctx.lineTo(x + Math.cos(a) * radius * 0.55, y + Math.sin(a) * radius * 0.55);
+        ctx.arc(x + Math.cos(a) * radius, y + Math.sin(a) * radius, big ? 5 : 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    shape('#d1d5db', 4, () => circle(x, y, radius * 0.56));
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.5;
+    for (let i = 0; i < 4; i++) {
+        const a = spin + i * Math.PI / 4;
+        ctx.beginPath();
+        line([[x - Math.cos(a) * radius * 0.56, y - Math.sin(a) * radius * 0.56], [x + Math.cos(a) * radius * 0.56, y + Math.sin(a) * radius * 0.56]]);
         ctx.stroke();
     }
+    shape('#f97316', 3, () => circle(x, y, radius * 0.16));
 }
 
-function drawBike(r) {
-    const colour = (BIKES.find(b => b.id === save.bike) || BIKES[0]).color;
-    const spin = r.distance * 2.4;
-    const x = viewWidth * BIKE_X, y = 416;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(-r.angle * Math.PI / 180);
-    if (r.crashed) ctx.rotate(0.3);
-    wheel(0, 0, 25, spin);
-    wheel(82, 0, 25, spin);
-    ctx.strokeStyle = colour;
-    ctx.fillStyle = colour;
-    ctx.lineWidth = 9;
-    ctx.lineCap = 'round';
+function drawRider(color, x, y) {
+    // Black pants and boots
+    shape(null, 16, () => line([[x + 2, y + 2], [x + 22, y + 26], [x + 34, y + 40]]));
+    ctx.strokeStyle = '#2b2f3d';
+    ctx.lineWidth = 10;
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(34, -24);
-    ctx.lineTo(62, -30);
-    ctx.lineTo(82, 0);
+    line([[x + 2, y + 2], [x + 22, y + 26], [x + 34, y + 40]]);
     ctx.stroke();
-    ctx.beginPath();
-    ctx.roundRect(22, -44, 44, 20, 8);
-    ctx.fill();
-    ctx.fillStyle = '#1f2937';
-    ctx.beginPath();
-    ctx.roundRect(0, -36, 36, 11, 5);
-    ctx.fill();
-    // Rider: stays more upright than the bike, leaning back into the wheelie
-    ctx.rotate(r.angle * 0.45 * Math.PI / 180);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.beginPath();
-    ctx.roundRect(8, -86, 21, 50, 9);
-    ctx.fill();
-    ctx.strokeStyle = '#e2e8f0';
+    shape('#fff', 4, () => ctx.roundRect(x + 24, y + 36, 26, 13, 4));
+
+    // White jersey with a coloured stripe
+    shape('#f8fafc', 5, () => ctx.roundRect(x - 13, y - 52, 29, 58, 12));
+    ctx.fillStyle = color;
+    ctx.fillRect(x - 10, y - 26, 24, 8);
+
+    // Arm reaching to the bars
+    shape(null, 13, () => line([[x + 3, y - 42], [x + 26, y - 28], [x + 46, y - 34]]));
+    ctx.strokeStyle = '#f8fafc';
     ctx.lineWidth = 7;
     ctx.beginPath();
-    ctx.moveTo(20, -74);
-    ctx.lineTo(58, -48);
+    line([[x + 3, y - 42], [x + 26, y - 28], [x + 46, y - 34]]);
     ctx.stroke();
-    ctx.fillStyle = colour;
+    shape(INK, 0, () => circle(x + 47, y - 34, 6));
+
+    // Black helmet with a visor and peak
+    shape('#1c1f2b', 5, () => circle(x + 5, y - 70, 20));
+    shape('#7dd3fc', 3, () => ctx.roundRect(x + 8, y - 77, 17, 11, 4));
+    shape('#1c1f2b', 4, () => line([[x + 8, y - 88], [x + 34, y - 86], [x + 28, y - 80], [x + 6, y - 80]]));
+    shape(color, 0, () => ctx.rect(x - 11, y - 72, 11, 5));
+}
+
+function drawDirtBike(color, spin) {
+    wheel(0, 0, 29, spin);
+    wheel(96, 0, 29, spin);
+    shape(null, 13, () => line([[0, 0], [34, -26]]));                 // swing arm
+    ctx.strokeStyle = '#9ca3af';
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.arc(19, -99, 15, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(21, -104, 14, 7);
+    line([[0, 0], [34, -26]]);
+    ctx.stroke();
+    shape(null, 13, () => line([[96, 0], [70, -54]]));                // long front forks
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    line([[96, 0], [70, -54]]);
+    ctx.stroke();
+    shape('#1c1f2b', 4, () => ctx.roundRect(30, -32, 34, 26, 6));      // engine
+    shape(color, 5, () => line([[-22, -36], [18, -28], [36, -48], [74, -50], [64, -26], [34, -14], [8, -22]]));   // body
+    ctx.closePath();
+    shape('#fff', 4, () => line([[10, -39], [32, -46], [42, -36], [18, -28]]));                                   // number panel
+    shape('#1c1f2b', 4, () => ctx.roundRect(-6, -48, 44, 11, 5));      // seat
+    shape(color, 4, () => line([[66, -40], [112, -42], [100, -30], [76, -30]]));                                  // front fender
+    shape(null, 7, () => line([[68, -56], [62, -66], [76, -68]]));     // handlebars
+}
+
+function drawCar(color, spin, truck) {
+    const r = truck ? 40 : 26, lift = truck ? 26 : 8, length = truck ? 126 : 128;
+    wheel(0, 0, r, spin, truck);
+    wheel(length, 0, r, spin, truck);
+    shape(color, 5, () => ctx.roundRect(-34, -40 - lift, length + 68, 38, 12));
+    shape(color, 5, () => ctx.roundRect(4, -74 - lift, 92, 40, 16));
+    shape('#7dd3fc', 4, () => ctx.roundRect(50, -68 - lift, 38, 26, 6));
+    shape('#7dd3fc', 4, () => ctx.roundRect(12, -68 - lift, 32, 26, 6));
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.fillRect(-24, -22 - lift, length + 48, 6);
+    shape('#fde047', 3, () => circle(length + 28, -24 - lift, 7));
+    shape('#1c1f2b', 3, () => circle(30, -56 - lift, 11));             // the driver's helmet
+}
+
+function drawVehicle(r, distance, vehicle) {
+    const spin = distance * 2.4;
+    const x = viewWidth * BIKE_X - 36, y = 413 + (vehicle.kind === 'truck' ? -11 : 0);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-(r.angle + (r.crashed ? 18 : 0)) * Math.PI / 180);
+    if (vehicle.kind === 'bike') {
+        drawDirtBike(vehicle.color, spin);
+        ctx.rotate(Math.min(r.angle, 80) * 0.55 * Math.PI / 180);      // the rider leans forward against the lift
+        drawRider(vehicle.color, 24, -56);
+    }
+    else drawCar(vehicle.color, spin, vehicle.kind === 'truck');
     ctx.restore();
 }
 
-// The balance gauge: an arc that shows where the bike is, with the green zone marked.
+// The balance gauge: an arc that shows where the wheel is, with the green zone marked.
 function drawGauge(r) {
     const cx = viewWidth / 2, cy = 150, radius = 62;
     // 0 degrees sits at the left of the arc and 120 at the right, going over the top.
@@ -448,7 +591,8 @@ function drawGauge(r) {
         ctx.stroke();
     };
     ctx.lineCap = 'butt';
-    arc(0, 120, 'rgba(0,0,0,.45)', 15);
+    arc(0, 120, 'rgba(0,0,0,.5)', 15);
+    arc(0, 12, '#ef4444', 15);
     arc(r.sweetLow, r.sweetHigh, '#22c55e', 15);
     arc(r.flip - 8, 120, '#ef4444', 15);
     const a = toAngle(Math.min(r.angle, 120));
@@ -468,27 +612,32 @@ function render() {
         s.shake *= 0.9;
     }
     if (!s) {
-        const demo = { angle: 28 + Math.sin(performance.now() / 700) * 14, distance: performance.now() / 110, crashed: null };
-        drawWorld(demo.distance, 0);
-        drawBike(demo);
+        const distance = performance.now() / 110;
+        drawWorld(distance, 0);
+        drawVehicle({ angle: 42 + Math.sin(performance.now() / 700) * 12 }, distance, myVehicle());
         return;
     }
     drawWorld(s.rider.distance, s.theme);
     drawThings(s);
-    drawBike(s.rider);
-    if (screen === 'riding' && !input.lock) drawGauge(s.rider);
+    drawVehicle(s.rider, s.rider.distance, myVehicle());
+    if (screen === 'riding') drawGauge(s.rider);
 }
 
 function updateHud() {
     const s = state, r = s.rider;
     $('hudScore').textContent = Math.floor(r.score).toLocaleString();
-    $('hudMult').textContent = input.lock ? '🔒' : '×' + r.multiplier;
+    $('hudMult').textContent = '×' + r.multiplier;
     $('multStat').classList.toggle('hot', r.multiplier > 1);
     $('hudDist').textContent = Math.floor(r.distance) + 'm';
-    $('hudCoins').textContent = s.coins;
+    $('hudCash').textContent = money(s.cash);
     const m = activeMissions()[0];
-    $('mission').textContent = input.lock ? 'Cruising: scores and missions are off. Coins still count.'
-        : m ? m.text + ' (' + Math.floor(Math.min(m.value(s), m.goal)) + '/' + m.goal + ')' : 'All missions done!';
+    $('mission').textContent = m ? m.text + ' (' + Math.floor(Math.min(m.value(s), m.goal)) + '/' + m.goal + ')' : 'All missions done!';
+    const chips = [];
+    if (r.shields > 0) chips.push('🛡️ ×' + r.shields);
+    if (r.distance < r.nitroUntil) chips.push('🔥 ' + Math.ceil(r.nitroUntil - r.distance) + 'm');
+    if (r.distance < s.cashDoubleUntil) chips.push('💵 ' + Math.ceil(s.cashDoubleUntil - r.distance) + 'm');
+    if (r.distance < r.oilUntil) chips.push('🛢️ Oil!');
+    $('boostChips').textContent = chips.join('   ');
 }
 
 // ---------- Main loop ----------
@@ -500,19 +649,21 @@ function frame(now) {
     const passed = Math.min((now - last) / 1000, 0.1);
     last = now;
     if (screen === 'riding') {
+        const r = state.rider;
         spare += passed;
         while (spare >= STEP) {
-            P.step(state.rider, input, STEP);
+            P.step(r, input, STEP);
             spare -= STEP;
         }
+        if (r.shieldUsed !== undefined && r.time - r.shieldUsed < passed + STEP) say('🛡️ Shield saved you!', 1100);
         spawn();
-        collect();
+        meetThings();
         checkMissions();
-        const theme = Math.floor(state.rider.distance / THEME_EVERY);
+        const theme = Math.floor(r.distance / THEME_EVERY);
         if (theme !== state.theme) { state.theme = theme; say(THEMES[theme % THEMES.length].name, 1800); }
-        sound.run(state.rider.speed, input.gas);
+        sound.run(r.speed, input.gas);
         updateHud();
-        if (state.rider.crashed) endRun();
+        if (r.crashed) endRun();
     }
     render();
 }
@@ -540,11 +691,10 @@ hold($('brakeBtn'), 'brake');
 const KEYS = { ArrowRight: 'gas', ArrowUp: 'gas', KeyD: 'gas', KeyW: 'gas', Space: 'gas', ArrowLeft: 'brake', ArrowDown: 'brake', KeyA: 'brake', KeyS: 'brake' };
 function key(e, down) {
     if (down && e.code === 'KeyP') { if (screen === 'riding') pause(); else if (screen === 'paused') show('riding'); return; }
-    if (down && e.code === 'KeyL' && screen === 'riding') { setLock(!input.lock); return; }
     const action = KEYS[e.code];
     if (!action) return;
     e.preventDefault();
-    if (screen === 'riding' && !input.lock) {
+    if (screen === 'riding') {
         input[action] = down;
         $(action === 'gas' ? 'gasBtn' : 'brakeBtn').classList.toggle('down', down);
     }
@@ -557,17 +707,15 @@ addEventListener('resize', resize);
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('selectstart', e => e.preventDefault());
 
-$('playBtn').addEventListener('click', () => newRun(false));
-$('cruiseBtn').addEventListener('click', () => newRun(true));
-$('againBtn').addEventListener('click', () => newRun(false));
+$('playBtn').addEventListener('click', newRun);
+$('againBtn').addEventListener('click', newRun);
 $('garageBtn').addEventListener('click', () => show('garage'));
 $('overGarage').addEventListener('click', () => show('garage'));
 $('garageBack').addEventListener('click', () => show('menu'));
 $('overMenu').addEventListener('click', () => show('menu'));
-$('quitBtn').addEventListener('click', () => { save.coins += state.coins; store(); show('menu'); });
+$('quitBtn').addEventListener('click', () => { save.cash += state.cash; store(); state = null; show('menu'); });
 $('resumeBtn').addEventListener('click', () => show('riding'));
 $('pauseBtn').addEventListener('click', pause);
-$('lockBtn').addEventListener('click', () => setLock(!input.lock));
 $('soundBtn').textContent = save.sound ? '🔊' : '🔇';
 $('soundBtn').addEventListener('click', () => {
     save.sound = !save.sound;
