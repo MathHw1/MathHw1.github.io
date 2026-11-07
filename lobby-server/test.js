@@ -104,6 +104,28 @@ const tests = {
         assert.strictEqual((await join(b, { room, playerId: 'player-b-6' })).error, 'not-found');
         a.close(); b.close();
     },
+    async 'lets a wheelie race join a room'() {
+        const a = await connect(), b = await connect();
+        const { room } = await join(a, { game: 'wheelie', create: true, playerId: 'player-a-8' });
+        assert.strictEqual((await join(b, { game: 'chess', room, playerId: 'player-b-8' })).error, 'not-found');
+        assert.ok((await join(b, { game: 'wheelie', room, playerId: 'player-b-8' })).ok);
+        a.close(); b.close();
+    },
+    async 'keeps the best score per name in order and rejects bad ones'() {
+        const post = (body, origin = ORIGIN) => fetch(url + '/scores', { method: 'POST', headers: { 'Content-Type': 'application/json', origin }, body: JSON.stringify(body) });
+        assert.strictEqual((await post({ game: 'wheelie', name: 'SAM', score: 100 })).status, 200);
+        assert.strictEqual((await post({ game: 'wheelie', name: 'AL', score: 300 })).status, 200);
+        const lower = await (await post({ game: 'wheelie', name: 'SAM', score: 50 })).json();
+        assert.deepStrictEqual(lower.scores, [{ name: 'AL', score: 300 }, { name: 'SAM', score: 100 }]);
+        assert.strictEqual(lower.rank, 2);
+        for (const bad of [{ game: 'wheelie', name: '<b>x', score: 5 }, { game: 'wheelie', name: 'OK', score: 1.5 }, { game: 'wheelie', name: 'OK', score: 999999999 }, { game: 'nope', name: 'OK', score: 5 }, { game: 'wheelie', name: '   ', score: 5 }]) {
+            assert.strictEqual((await post(bad)).status, 400);
+        }
+        assert.strictEqual((await post({ game: 'wheelie', name: 'BAD', score: 5 }, 'https://evil.example')).status, 403);
+        const read = await fetch(url + '/scores/wheelie', { headers: { origin: ORIGIN } });
+        assert.strictEqual(read.headers.get('access-control-allow-origin'), ORIGIN);
+        assert.strictEqual((await read.json()).scores.length, 2);
+    },
     async 'works over plain HTTPS requests, without WebSockets'() {
         const a = await connect({ transports: ['polling'] });
         assert.ok((await join(a, { create: true, playerId: 'player-a-7' })).ok);

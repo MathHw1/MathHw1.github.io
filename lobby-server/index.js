@@ -17,7 +17,7 @@ const TRANSPORTS = (process.env.TRANSPORTS || 'websocket,polling').split(',');
 const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0/O or 1/I/L, so codes are easy to read out
 const CODE_LENGTH = 5;
 const SEATS = 2;
-const GAMES = ['pool', 'chess'];
+const GAMES = ['pool', 'chess', 'wheelie'];
 const MAX_ROOMS = 5000;
 const MAX_MESSAGE_BYTES = 64 * 1024;
 const MAX_MESSAGES_PER_SECOND = 40;
@@ -25,6 +25,16 @@ const LOG_LENGTH = 1000;                       // messages kept per room, for pl
 const RECONNECT_GRACE_MS = Number(process.env.RECONNECT_GRACE_MS) || 120000;   // how long a dropped player keeps their seat
 const WAITING_ROOM_MS = 30 * 60000;            // a lobby nobody joined closes after this
 const CLEANUP_MS = Math.min(5000, RECONNECT_GRACE_MS / 2);
+
+// The leaderboard lives in memory, and free hosts wipe that when they sleep. Each player's browser
+// keeps their own best and sends it again on every visit, so the board fills back up by itself.
+const SCORE_GAMES = ['wheelie'];
+const BOARD_SIZE = 200;
+const SHOWN_SCORES = 20;
+const MAX_SCORE = 50000000;
+const MAX_SUBMITS_PER_MINUTE = 20;
+const scores = new Map(SCORE_GAMES.map(game => [game, []]));
+const submits = new Map();         // address -> { count, resetAt }
 
 const rooms = new Map();   // code -> { code, game, seats: [seat, seat], log, nextSeq, createdAt }
 
@@ -115,6 +125,56 @@ app.get('/', (req, res) => res.type('text').send('Nebula Arcade lobby server is 
 app.get('/health', (req, res) => {
     res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(req.headers.origin) ? req.headers.origin : ALLOWED_ORIGINS[0]);
     res.json({ ok: true });
+});
+
+function allowSite(req, res) {
+    if (!ALLOWED_ORIGINS.includes(req.headers.origin)) return false;
+    res.set('Access-Control-Allow-Origin', req.headers.origin);
+    res.set('Vary', 'Origin');
+    return true;
+}
+
+function tooManySubmits(req) {
+    const address = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0];
+    const now = Date.now();
+    let entry = submits.get(address);
+    if (!entry || now > entry.resetAt) {
+        if (submits.size > 10000) submits.clear();
+        entry = { count: 0, resetAt: now + 60000 };
+        submits.set(address, entry);
+    }
+    return ++entry.count > MAX_SUBMITS_PER_MINUTE;
+}
+
+const topScores = game => scores.get(game).slice(0, SHOWN_SCORES);
+
+app.options('/scores', (req, res) => {
+    if (!allowSite(req, res)) return res.sendStatus(403);
+    res.set('Access-Control-Allow-Methods', 'GET, POST');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.sendStatus(204);
+});
+
+app.get('/scores/:game', (req, res) => {
+    allowSite(req, res);
+    if (!scores.has(req.params.game)) return res.sendStatus(404);
+    res.json({ scores: topScores(req.params.game) });
+});
+
+app.post('/scores', express.json({ limit: '1kb' }), (req, res) => {
+    if (!allowSite(req, res)) return res.sendStatus(403);
+    if (tooManySubmits(req)) return res.sendStatus(429);
+    const { game, name, score } = req.body || {};
+    if (!scores.has(game) || typeof name !== 'string' || !/^[A-Z0-9 ]{1,12}$/.test(name) || !name.trim() ||
+        !Number.isInteger(score) || score < 1 || score > MAX_SCORE) return res.sendStatus(400);
+
+    // One line per name, keeping that name's best score.
+    const board = scores.get(game), clean = name.trim(), mine = board.find(entry => entry.name === clean);
+    if (!mine) board.push({ name: clean, score });
+    else if (score > mine.score) mine.score = score;
+    board.sort((a, b) => b.score - a.score);
+    board.length = Math.min(board.length, BOARD_SIZE);
+    res.json({ scores: topScores(game), rank: board.findIndex(entry => entry.name === clean) + 1 });
 });
 
 const server = http.createServer(app);
