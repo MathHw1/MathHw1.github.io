@@ -1,6 +1,6 @@
 "use strict";
 
-// Nebula Wheelie: an original wheelie game for Nebula Arcade. The bike's physics are in physics.js.
+// Wheelie Life: an original wheelie game for Nebula Arcade. The bike's physics are in physics.js.
 // This file handles the road, coins, missions, garage, drawing and controls.
 
 const $ = id => document.getElementById(id);

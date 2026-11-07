@@ -1,6 +1,6 @@
 "use strict";
 
-// The bike's physics for Nebula Wheelie, kept apart from the drawing so it can be tested on its own.
+// The bike's physics for Wheelie Life, kept apart from the drawing so it can be tested on its own.
 // The angle is in degrees: 0 means both wheels are down and 90 means straight up.
 
 const WheeliePhysics = (function () {
