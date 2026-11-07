@@ -52,7 +52,7 @@ function initScoreboard() {
         bar.style.display = playing ? 'flex' : 'none';
         if (!playing) return;
 
-        var mid = Online.on ? (Online.isRemoteTurn() ? 'Their turn' : 'Your turn') : 'VS';
+        var mid = Online.notice || (Online.on ? (Online.isRemoteTurn() ? 'Their turn' : 'Your turn') : 'VS');
         var html = player(0) + '<div class="mid">' + mid + '</div>' + player(1);
         if (html !== last) { bar.innerHTML = html; last = html; }
     }, 150);

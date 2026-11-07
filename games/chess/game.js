@@ -1,8 +1,7 @@
 "use strict";
 
 // Chess for Nebula Arcade. Rules come from chess.js and the bots from Stockfish (both in lib/).
-// Online games connect the two browsers directly with PeerJS, the same way Classic Pool does:
-// the lobby code is the host's PeerJS id.
+// Online games go through the lobby server, the same way Classic Pool does (games/shared/lobby-client.js).
 
 const $ = id => document.getElementById(id);
 
@@ -33,11 +32,6 @@ const ENGINE_TIMEOUT_MS = 12000;
 const LOW_TIME_MS = 30000;          // clock turns red under this
 const FLAG_GRACE_MS = 2000;         // online: time allowed for a last-second move to arrive
 
-const LOBBY_PREFIX = 'nebula-arcade-chess-';
-const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0/O or 1/I/L, so codes are easy to read out
-const SERVER_TIMEOUT_MS = 12000;
-const CONNECT_TIMEOUT_MS = 15000;
-const JOIN_RETRIES = 2;
 
 let chess = new Chess();
 let mode = null;            // 'bot' or 'online'
@@ -114,6 +108,7 @@ function renderStatus() {
     let text;
     s.classList.remove('alert');
     if (over) text = 'Game over';
+    else if (online.notice) text = online.notice;
     else if (chess.turn() !== myColor) text = mode === 'bot' ? '🤖 The bot is thinking…' : '⏳ Waiting for your friend…';
     else if (chess.in_check()) { text = '⚠️ Check! Your king is under attack. You must protect it.'; s.classList.add('alert'); }
     else if (selected) {
@@ -411,93 +406,46 @@ function playAgain() {
 // ---------- Online lobby ----------
 
 const online = {
-    peer: null, conn: null, retryTimer: null, rematchMine: false, rematchTheirs: false,
+    lobby: null, notice: '', rematchMine: false, rematchTheirs: false,
 
-    send(msg) { if (this.conn && this.conn.open) this.conn.send(msg); },
+    send(msg) { if (this.lobby) this.lobby.send(msg); },
 
-    create() {
-        if (typeof Peer === 'undefined') { lobbyMessage('Online play couldn’t load. Check your internet and refresh.'); return; }
+    connect() {
         this.leave();
-        let code = '';
-        for (let i = 0; i < 5; i++) code += CODE_LETTERS[Math.floor(Math.random() * CODE_LETTERS.length)];
-        lobbyMessage('Creating lobby…');
-        const peer = this.peer = new Peer(LOBBY_PREFIX + code);
-        this.watchServer(peer);
-        peer.on('open', () => { $('lobbyCode').textContent = code; showLobby('wait'); lobbyMessage(''); });
-        peer.on('connection', conn => {
-            // A join that failed doesn't count as filling the lobby.
-            if (this.conn && this.conn.open) { conn.close(); return; }
-            if (this.conn) this.conn.close();
-            this.attach(conn, 'w');
-        });
-        peer.on('error', err => {
-            if (err.type === 'unavailable-id') this.create();   // someone has this code already
-            else this.fail(err);
+        this.lobby = new NebulaLobby('chess', {
+            onWaiting: code => { $('lobbyCode').textContent = code; showLobby('wait'); lobbyMessage(''); },
+            onStart: seat => {
+                // The host starts as White and tells the guest how much time was picked.
+                if (seat === 0) { this.send({ t: 'start', minutes }); startGame('online', 'w'); }
+            },
+            onMessage: msg => this.receive(msg),
+            onStatus: text => {
+                if (mode === 'online') this.setNotice(text);
+                else lobbyMessage(text);
+            },
+            onOpponentAway: () => this.setNotice('📡 Your friend’s connection dropped. Waiting for them to come back…'),
+            onOpponentBack: () => this.setNotice(''),
+            onOpponentLeft: () => {
+                this.setNotice('');
+                if (mode !== 'online') return;
+                if (!over) finish('🏆 You win!', 'Your friend left the game.');
+                else { $('overAgain').textContent = 'Your friend left'; $('overAgain').disabled = true; }
+            },
+            onError: text => {
+                this.setNotice('');
+                if (mode === 'online' && !over) finish('Connection lost', text);
+                else if (!mode) { showLobby('start'); lobbyMessage(text); }
+            }
         });
     },
 
-    join(code, triesLeft) {
-        if (typeof Peer === 'undefined') { lobbyMessage('Online play couldn’t load. Check your internet and refresh.'); return; }
-        code = (code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-        if (code.length !== 5) { lobbyMessage('That code should be 5 letters or numbers.'); return; }
-        if (triesLeft === undefined) triesLeft = JOIN_RETRIES;
-        this.leave();
-        lobbyMessage('Joining lobby ' + code + '…');
-        const peer = this.peer = new Peer();
-        this.watchServer(peer);
-        peer.on('open', () => {
-            if (this.conn) return;   // already joining (this fires again after a reconnect)
-            this.attach(peer.connect(LOBBY_PREFIX + code, { reliable: true }), 'b');
-        });
-        peer.on('error', err => {
-            if (err.type === 'peer-unavailable') {
-                this.leave();
-                // The server sometimes says a lobby doesn't exist when it does, so try again first.
-                if (triesLeft > 0) this.retryTimer = setTimeout(() => this.join(code, triesLeft - 1), 1500);
-                else lobbyMessage('No lobby with code ' + code + '. Check the code and try again.');
-            }
-            else this.fail(err);
-        });
-    },
+    create() { this.connect(); this.lobby.create(); },
 
-    // Keeps a lobby reachable if the link to the matchmaking server drops, and gives up
-    // with a message if the server never answers.
-    watchServer(peer) {
-        peer.on('disconnected', () => { if (this.peer === peer && !peer.destroyed) peer.reconnect(); });
-        setTimeout(() => {
-            if (this.peer === peer && !peer.open && !peer.destroyed && !this.conn) {
-                this.leave();
-                showLobby('start');
-                lobbyMessage('The lobby server didn’t answer. Check your internet and try again.');
-            }
-        }, SERVER_TIMEOUT_MS);
-    },
+    join(code) { this.connect(); this.lobby.join(code); },
 
-    attach(conn, color) {
-        this.conn = conn;
-        conn.on('open', () => {
-            // The host starts as White and tells the guest how much time was picked.
-            if (color === 'w') { this.send({ t: 'start', minutes }); startGame('online', 'w'); }
-        });
-        conn.on('data', msg => this.receive(msg));
-        conn.on('error', err => { if (this.conn === conn) this.fail(err); });
-        conn.on('close', () => {
-            if (this.conn !== conn) return;
-            this.conn = null;
-            if (mode === 'online' && !over) finish('🏆 You win!', 'Your friend left the game.');
-            else if (mode === 'online') { $('overAgain').textContent = 'Your friend left'; $('overAgain').disabled = true; }
-        });
-        // If the two computers can't reach each other, say so instead of hanging forever.
-        setTimeout(() => {
-            if (this.conn !== conn || conn.open) return;
-            this.conn = null;
-            conn.close();
-            if (color === 'b') {
-                this.leave();
-                lobbyMessage('Couldn’t reach your friend’s game. Make sure their lobby is still open, then try again. ' +
-                    'If it keeps failing, one of your networks (often school Wi-Fi) is blocking it.');
-            }
-        }, CONNECT_TIMEOUT_MS);
+    setNotice(text) {
+        this.notice = text;
+        if (mode) renderStatus();
     },
 
     receive(msg) {
@@ -536,17 +484,10 @@ const online = {
         startGame('online', myColor === 'w' ? 'b' : 'w');   // swap colours
     },
 
-    fail(err) {
-        console.warn('Online chess error', err);
-        lobbyMessage('Couldn’t connect (' + (err.type || 'network error') +
-            '). Some school or work networks block this. Try again, or try another network.');
-    },
-
     leave() {
-        clearTimeout(this.retryTimer);
         this.rematchMine = this.rematchTheirs = false;
-        if (this.conn) { const c = this.conn; this.conn = null; c.close(); }
-        if (this.peer) { this.peer.destroy(); this.peer = null; }
+        this.notice = '';
+        if (this.lobby) { const lobby = this.lobby; this.lobby = null; lobby.leave(); }
     }
 };
 
@@ -639,3 +580,4 @@ window.addEventListener('pointerup', e => {
 });
 
 fillHowTo();
+NebulaLobby.warmUp();
