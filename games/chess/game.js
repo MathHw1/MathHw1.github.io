@@ -30,6 +30,9 @@ const LEVELS = {
 const MIN_BOT_THINK_MS = 500;       // so the bot doesn't reply instantly
 const ENGINE_TIMEOUT_MS = 12000;
 const LOW_TIME_MS = 30000;          // clock turns red under this
+const LAST_SECONDS_MS = 10000;
+const STARTING_ELO = 1200;
+const ELO_K = 32;                   // the most a rating can move in one game
 const FLAG_GRACE_MS = 2000;         // online: time allowed for a last-second move to arrive
 
 
@@ -204,6 +207,7 @@ function finish(title, text) {
     targets = [];
     online.rematchMine = online.rematchTheirs = false;
     render();
+    if (mode === 'online') text += online.rate(title);
     $('overTitle').textContent = title;
     $('overText').textContent = text;
     $('overAgain').textContent = 'Play again';
@@ -220,7 +224,8 @@ function formatTime(ms) {
 }
 
 function clockRunning() {
-    return minutes > 0 && !over && chess.history().length > 0;   // starts after White's first move
+    // Starts after White's first move, and stops while a player is away so nobody loses on time.
+    return minutes > 0 && !over && chess.history().length > 0 && !(mode === 'online' && (online.holding || document.hidden));
 }
 
 function renderClocks() {
@@ -235,6 +240,26 @@ function renderClocks() {
     $('clockThem').classList.toggle('low', clock[them] < LOW_TIME_MS);
 }
 
+// A warning as you pass 30 seconds, then a tick for every second of the last 10.
+function lowTimeBeep(before, now) {
+    const crossed = limit => before > limit && now <= limit;
+    if (crossed(LOW_TIME_MS)) beep(660, 0.25);
+    else if (now <= LAST_SECONDS_MS && Math.ceil(before / 1000) !== Math.ceil(now / 1000)) beep(880, 0.08);
+}
+
+let audio = null;
+function beep(pitch, seconds) {
+    try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        const tone = audio.createOscillator(), volume = audio.createGain();
+        tone.frequency.value = pitch;
+        volume.gain.value = 0.08;
+        tone.connect(volume).connect(audio.destination);
+        tone.start();
+        tone.stop(audio.currentTime + seconds);
+    } catch (_) {}
+}
+
 let lastTick = performance.now();
 setInterval(() => {
     const now = performance.now();
@@ -243,8 +268,10 @@ setInterval(() => {
     if (!mode || !clockRunning()) return;
 
     const turn = chess.turn();
+    const before = clock[turn];
     clock[turn] -= passed;
     renderClocks();
+    if (turn === myColor) lowTimeBeep(before, clock[turn]);
     if (turn === myColor && clock[turn] <= 0) {
         if (mode === 'online') online.send({ t: 'flag' });
         finish('⏰ Out of time. You lost.', 'Your clock reached zero. Try a longer time next game!');
@@ -406,7 +433,22 @@ function playAgain() {
 // ---------- Online lobby ----------
 
 const online = {
-    lobby: null, notice: '', rematchMine: false, rematchTheirs: false,
+    lobby: null, notice: '', rematchMine: false, rematchTheirs: false, holding: false, theirElo: STARTING_ELO,
+
+    myElo() { return NebulaProfile.stats('chess', { elo: STARTING_ELO }).elo; },
+
+    // Updates this player's rating from the result. Returns a line to show on the end screen.
+    rate(title) {
+        if (/connection lost/i.test(title)) return '';
+        const won = /win/i.test(title), drew = /draw|stalemate/i.test(title), mine = this.myElo();
+        const expected = 1 / (1 + Math.pow(10, (this.theirElo - mine) / 400));
+        const elo = Math.max(100, Math.round(mine + ELO_K * ((won ? 1 : drew ? 0.5 : 0) - expected)));
+        const stats = NebulaProfile.stats('chess', { wins: 0, losses: 0, draws: 0 });
+        NebulaProfile.setStats('chess', { elo, wins: stats.wins + (won ? 1 : 0), losses: stats.losses + (won || drew ? 0 : 1), draws: stats.draws + (drew ? 1 : 0) });
+        const reply = NebulaScores.record('chess:elo', elo);
+        if (reply) reply.catch(() => {});
+        return ' ELO: ' + elo + ' (' + (elo >= mine ? '+' : '') + (elo - mine) + ')';
+    },
 
     send(msg) { if (this.lobby) this.lobby.send(msg); },
 
@@ -416,6 +458,7 @@ const online = {
             onWaiting: code => { $('lobbyCode').textContent = code; showLobby('wait'); lobbyMessage(''); },
             onStart: seat => {
                 // The host starts as White and tells the guest how much time was picked.
+                this.send({ t: 'elo', elo: this.myElo() });
                 if (seat === 0) { this.send({ t: 'start', minutes }); startGame('online', 'w'); }
             },
             onMessage: msg => this.receive(msg),
@@ -423,13 +466,22 @@ const online = {
                 if (mode === 'online') this.setNotice(text);
                 else lobbyMessage(text);
             },
-            onOpponentAway: () => this.setNotice('📡 Your friend’s connection dropped. Waiting for them to come back…'),
-            onOpponentBack: () => this.setNotice(''),
+            onRoster: () => showKick(),
+            onOpponentAway: () => { this.holding = true; this.setNotice('📡 Your friend stepped away. The clocks are paused until they’re back…'); },
+            onOpponentBack: () => { this.holding = false; this.setNotice(''); },
             onOpponentLeft: () => {
+                this.holding = false;
                 this.setNotice('');
                 if (mode !== 'online') return;
                 if (!over) finish('🏆 You win!', 'Your friend left the game.');
                 else { $('overAgain').textContent = 'Your friend left'; $('overAgain').disabled = true; }
+                // Open the spot back up, so someone new can join with the same code.
+                this.lobby.started = false;
+                $('overText').textContent += ' Lobby ' + this.lobby.code + ' is open for someone new.';
+            },
+            onKicked: () => {
+                this.leave();
+                location.reload();
             },
             onError: text => {
                 this.setNotice('');
@@ -449,8 +501,11 @@ const online = {
     },
 
     receive(msg) {
-        if (!msg || !mode && msg.t !== 'start') return;
+        if (!msg || !mode && msg.t !== 'start' && msg.t !== 'elo') return;
         switch (msg.t) {
+            case 'elo':
+                this.theirElo = Number(msg.elo) || STARTING_ELO;
+                break;
             case 'start': {
                 const m = Number(msg.minutes);
                 minutes = m >= 0 && m <= 180 ? m : 10;
@@ -543,8 +598,23 @@ $('levels').addEventListener('click', e => {
 });
 
 $('createBtn').addEventListener('click', () => online.create());
-$('joinBtn').addEventListener('click', () => online.join($('joinCode').value));
-$('joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') online.join($('joinCode').value); });
+// Lobby codes use the on-screen keyboard, so an iPad's own keyboard doesn't cover the page.
+$('joinCode').classList.add('hidden');
+$('joinBtn').textContent = 'Join with a code';
+$('joinBtn').addEventListener('click', () => {
+    showTouchKeyboard({ title: 'Type your friend’s lobby code', maxLength: 5, exactLength: 5, okLabel: 'Join', onDone: code => online.join(code) });
+});
+
+// The host can remove the other player, which opens their seat again.
+const kickBtn = document.createElement('button');
+kickBtn.textContent = 'Kick player';
+kickBtn.style.cssText = 'position:fixed;left:10px;bottom:10px;z-index:40;padding:8px 12px;font:700 13px system-ui,sans-serif;color:#fecaca;background:#1f2937;border:1px solid #7f1d1d;border-radius:9px;display:none';
+kickBtn.addEventListener('click', () => { if (online.lobby) online.lobby.kick(online.lobby.seat === 0 ? 1 : 0); });
+document.body.appendChild(kickBtn);
+function showKick() {
+    const lobby = online.lobby, full = lobby && lobby.roster && lobby.roster.seats.every(Boolean);
+    kickBtn.style.display = full && lobby.isHost ? 'block' : 'none';
+}
 $('cancelBtn').addEventListener('click', () => { online.leave(); showLobby('start'); lobbyMessage(''); });
 
 $('hintBtn').addEventListener('click', showHint);

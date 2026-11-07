@@ -1,7 +1,7 @@
 "use strict";
 
 // Online lobby for Nebula Arcade games, talking to lobby-server/ over Socket.io.
-// Needs socket.io.min.js loaded first. Used by Classic Pool and Chess.
+// Needs socket.io.min.js loaded first. Used by Classic Pool, Chess, Wheelie Life and Car Racing.
 //
 //   const lobby = new NebulaLobby('chess', {
 //       onWaiting(code)       the lobby exists; show the code to share
@@ -11,9 +11,12 @@
 //       onOpponentAway()      the other player's connection dropped (they may come back)
 //       onOpponentBack()
 //       onOpponentLeft()      they've gone for good
+//       onRoster(room)        who's in the room changed: { host, seats: [{ name, away } or null, ...] }
+//       onKicked()            the host removed you
 //       onError(text)         couldn't create or join, or the game is lost
 //   });
-//   lobby.create();  lobby.join('ABCDE');  lobby.send({...});  lobby.leave();
+//   lobby.create();  lobby.join('ABCDE');  lobby.send({...});  lobby.kick(seat);  lobby.leave();
+//   Pass { manualStart: true } as a third option for rooms where the host presses Start.
 
 // The address of the deployed lobby server. Testing on this computer uses a local one.
 const LOBBY_SERVER_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
@@ -26,15 +29,21 @@ const ATTEMPT_TIMEOUT_MS = 8000;      // how long one connection attempt can tak
 const LOBBY_ERRORS = {
     'not-found': code => 'No lobby with code ' + code + '. Check the code and try again.',
     'full': () => 'That lobby is already full.',
+    'kicked': () => 'The host removed you from that lobby.',
     'server-full': () => 'The lobby server is full right now. Try again soon.'
 };
 
 class NebulaLobby {
-    constructor(game, handlers) {
+    constructor(game, handlers, options) {
         this.game = game;
         this.on = handlers;
+        this.manualStart = !!(options && options.manualStart);
         this.socket = null;
+        this.roster = null;
         this.reset();
+        // Hiding the game counts as stepping away, so the others wait instead of playing on.
+        this.onVisibility = () => { if (this.connected) this.socket.emit('player-status', document.hidden); };
+        document.addEventListener('visibilitychange', this.onVisibility);
     }
 
     reset() {
@@ -96,6 +105,12 @@ class NebulaLobby {
         socket.on('player-joined', info => this.onPlayerJoined(info));
         socket.on('player-away', () => this.on.onOpponentAway());
         socket.on('player-left', () => this.on.onOpponentLeft());
+        socket.on('roster', room => this.setRoster(room));
+        socket.on('kicked', () => {
+            this.leave();
+            if (this.on.onKicked) this.on.onKicked();
+            else this.on.onError('The host removed you from the lobby.');
+        });
         socket.on('game-state-update', update => {
             // Numbered updates can arrive twice around a reconnect. Live ones have no number.
             if (update.seq) {
@@ -112,6 +127,10 @@ class NebulaLobby {
         const request = returning
             ? { game: this.game, room: this.code, playerId: this.playerId, lastSeq: this.lastSeq }
             : { game: this.game, playerId: this.playerId, ...this.target };
+        if (typeof NebulaProfile !== 'undefined') {
+            request.name = NebulaProfile.name();
+            request.deviceId = NebulaProfile.deviceId();
+        }
 
         this.socket.emit('join-room', request, reply => {
             clearTimeout(this.slowTimer);
@@ -129,17 +148,48 @@ class NebulaLobby {
             this.joined = true;
             this.code = reply.room;
             this.seat = reply.seat;
+            this.setRoster(reply.roster);
             this.unconfirmed.forEach(update => this.emitUpdate(update));
 
             if (returning) this.on.onStatus('');
-            else if (reply.players === 2) { this.on.onStatus(''); this.begin(); }
+            else if (reply.players >= 2 && !this.manualStart) { this.on.onStatus(''); this.begin(); }
             else { this.on.onStatus(''); this.on.onWaiting(this.code); }
         });
     }
 
+    setRoster(room) {
+        this.roster = room;
+        if (this.on.onRoster) this.on.onRoster(room);
+    }
+
+    // Fills a list with the players, with a Kick button for the host.
+    static fillRoster(list, lobby) {
+        list.textContent = '';
+        if (!lobby || !lobby.roster) return;
+        lobby.roster.seats.forEach((seat, n) => {
+            if (!seat) return;
+            const item = document.createElement('li'), name = document.createElement('span');
+            name.textContent = (n === lobby.roster.host ? '👑 ' : '') + seat.name + (n === lobby.seat ? ' (you)' : '') + (seat.away ? ' · away' : '');
+            item.appendChild(name);
+            if (lobby.isHost && n !== lobby.seat) {
+                const kick = document.createElement('button');
+                kick.textContent = 'Kick';
+                kick.addEventListener('click', () => lobby.kick(n));
+                item.appendChild(kick);
+            }
+            list.appendChild(item);
+        });
+    }
+
+    get isHost() { return !!this.roster && this.roster.host === this.seat; }
+
+    kick(seat) {
+        if (this.connected) this.socket.emit('kick-player', seat);
+    }
+
     onPlayerJoined(info) {
         if (info.rejoined) this.on.onOpponentBack();
-        else this.begin();
+        else if (!this.manualStart) this.begin();
     }
 
     begin() {

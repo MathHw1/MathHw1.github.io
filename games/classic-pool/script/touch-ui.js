@@ -2,7 +2,7 @@
 
 // Touch controls added for Nebula Arcade (iPad).
 // The original game sets shot power with the W/S keys, which touch screens don't have.
-// Here: touch the table to aim, then pull the power bar down and let go to shoot.
+// Here: touch the table to aim, then pull the power bar down and let go to shoot. It works with a mouse too.
 function initTouchUI() {
     var touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
@@ -44,11 +44,12 @@ function initTouchUI() {
         var s = stick();
         if (s && canShoot()) s.origin.x = 970 + frac * 125;   // pull the cue back, same as holding W
     }
-    function y(e) { return e.changedTouches[0].clientY; }
+    function y(e) { return e.clientY; }
     function down(e) {
         e.stopPropagation(); e.preventDefault();               // keep bar touches from moving the aim
         if (!canShoot()) return;
         dragging = true; startY = y(e); setFrac(0);
+        try { bar.setPointerCapture(e.pointerId); } catch (_) {}
     }
     function move(e) {
         e.stopPropagation(); e.preventDefault();
@@ -64,13 +65,16 @@ function initTouchUI() {
         s.origin = new Vector2(970, 11);
         if (canShoot() && power > 3) s.shoot(power, s.rotation);
     }
-    bar.addEventListener('touchstart', down, { passive: false });
-    bar.addEventListener('touchmove', move, { passive: false });
-    bar.addEventListener('touchend', up, { passive: false });
-    bar.addEventListener('touchcancel', up, { passive: false });
+    bar.addEventListener('pointerdown', down);
+    bar.addEventListener('pointermove', move);
+    bar.addEventListener('pointerup', up);
+    bar.addEventListener('pointercancel', up);
+    ['touchstart', 'touchend', 'mousedown', 'mouseup'].forEach(function (type) {
+        bar.addEventListener(type, function (e) { e.stopPropagation(); });     // keep bar presses from moving the aim
+    });
 
     setInterval(function () {
-        var playing = touch && Game.gameWorld && !GAME_STOPPED && Date.now() - lastLoop < 500;
+        var playing = Game.gameWorld && !GAME_STOPPED && Date.now() - lastLoop < 500;
         bar.style.display = playing ? 'block' : 'none';
         bar.style.opacity = canShoot() || dragging ? 1 : 0.35;
 
@@ -78,9 +82,9 @@ function initTouchUI() {
         if (playing) {
             if (innerHeight > innerWidth) t = 'Turn your iPad sideways for a bigger table';
             else if (cpuTurn()) t = 'Computer’s turn…';
-            else if (Online.isRemoteTurn()) t = 'Your opponent’s turn…';
+            else if (Online.isRemoteTurn()) t = Online.turnText();
             else if (stick() && !stick().visible && !stick().shooting && !Game.gameWorld.whiteBall.moving) t = 'Tap the table to place the white ball';
-            else if (canShoot() && !dragging) t = 'Touch the table to aim, then pull the bar down';
+            else if (canShoot() && !dragging) t = touch ? 'Touch the table to aim, then pull the bar down' : 'Mouse or arrow keys to aim. Hold Space for power, then let go';
         }
         tip.textContent = t;
         tip.style.display = t ? 'block' : 'none';

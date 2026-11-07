@@ -97,9 +97,10 @@
       <h2>⏱️ Time for each player</h2>
       <div class="row" id="times">
         <button data-min="0">No clock</button>
+        <button data-min="1">Bullet 1 min</button>
         <button data-min="3">3 min</button>
-        <button data-min="5">5 min</button>
-        <button data-min="10" class="on">10 min</button>
+        <button data-min="5">Blitz 5 min</button>
+        <button data-min="10" class="on">Rapid 10 min</button>
         <button data-min="15">15 min</button>
       </div>
       <div class="row">
@@ -200,6 +201,9 @@
 
 <script src="../shared/socket.io.min.js"></script>
 <script src="../shared/lobby-client.js"></script>
+<script src="../shared/touch-keyboard.js"></script>
+<script src="../shared/profile.js"></script>
+<script src="../shared/scores.js"></script>
 <script src="lib/chess.js"></script>
 <script src="game.js"></script>
 </body>

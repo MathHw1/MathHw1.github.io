@@ -7,6 +7,7 @@ function handleKeyDown(evt) {
     if (!Keyboard._keyStates[code].down)
         Keyboard._keyStates[code].pressed = true;
     Keyboard._keyStates[code].down = true;
+    if (code === 32 || (code >= 37 && code <= 40)) evt.preventDefault();   // stops the page scrolling
 }
 
 function handleKeyUp(evt) {

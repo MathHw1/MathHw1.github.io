@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>Owner Panel</title>
+  <style>
+    :root { --bg:#0b0d14; --panel:#151925; --line:rgba(255,255,255,.1); --text:#e2e8f0; --muted:#94a3b8; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,sans-serif; }
+    main { max-width:760px; margin:0 auto; padding:24px 16px 48px; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin-top:14px; }
+    h1 { margin:0; font-size:26px; } h2 { margin:0 0 8px; font-size:17px; }
+    input { width:100%; padding:12px; font-size:16px; color:#fff; background:#0b0f19; border:1px solid var(--line); border-radius:9px; }
+    button { padding:8px 11px; font:inherit; font-size:13px; font-weight:700; color:#fff; background:rgba(255,255,255,.1); border:1px solid var(--line); border-radius:8px; cursor:pointer; touch-action:manipulation; }
+    button.danger { color:#fecaca; border-color:#7f1d1d; }
+    .row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:7px 0; border-top:1px solid var(--line); }
+    .who { flex:1 1 200px; overflow-wrap:anywhere; }
+    .who small { display:block; color:var(--muted); }
+    #message { color:#fbbf24; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Owner Panel</h1>
+  <p id="message"></p>
+  <section id="login">
+    <h2>Password</h2>
+    <input id="password" type="password" autocomplete="off">
+    <p><button id="signIn">Open</button></p>
+  </section>
+  <div id="panel" class="hidden">
+    <p><button id="refresh">Refresh</button> <button id="signOut">Forget this device</button></p>
+    <div id="boards"></div>
+    <section><h2>Banned devices</h2><div id="banned"></div></section>
+    <p>Boards and bans reset whenever the free server restarts or sleeps.</p>
+  </div>
+</main>
+<script src="games/shared/lobby-client.js"></script>
+<script src="games/shared/touch-keyboard.js"></script>
+<script>
+  // The password is checked by the server and never appears in this page. It stays on this device only.
+  const KEY = 'nebula-owner-password';
+  const $ = id => document.getElementById(id);
+  const memory = {
+    get() { try { return localStorage.getItem(KEY) || ''; } catch (_) { return ''; } },
+    set(v) { try { localStorage.setItem(KEY, v); } catch (_) {} },
+    clear() { try { localStorage.removeItem(KEY); } catch (_) {} }
+  };
+  let password = memory.get();
+
+  async function call(path, body) {
+    const reply = await fetch(LOBBY_SERVER_URL + '/admin/' + path, {
+      method: body ? 'POST' : 'GET',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password },
+      body: body && JSON.stringify(body)
+    });
+    if (reply.status === 401) { signedOut('That password didn’t work.'); throw new Error('denied'); }
+    if (!reply.ok) throw new Error('Server error ' + reply.status);
+    return reply.json();
+  }
+  function signedOut(text) {
+    password = '';
+    memory.clear();
+    $('login').classList.remove('hidden');
+    $('panel').classList.add('hidden');
+    $('message').textContent = text;
+  }
+  function button(label, action, danger) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (danger) b.className = 'danger';
+    b.addEventListener('click', action);
+    return b;
+  }
+  const act = (path, body) => call(path, body).then(draw).catch(problem => { $('message').textContent = problem.message; });
+
+  function draw(view) {
+    $('login').classList.add('hidden');
+    $('panel').classList.remove('hidden');
+    $('message').textContent = '';
+    const boards = $('boards');
+    boards.textContent = '';
+    for (const [board, entries] of Object.entries(view.boards)) {
+      const section = document.createElement('section'), title = document.createElement('h2');
+      title.textContent = board + ' (' + entries.length + ')';
+      section.appendChild(title);
+      for (const entry of entries) {
+        const row = document.createElement('div'), who = document.createElement('div'), id = document.createElement('small');
+        row.className = 'row';
+        who.className = 'who';
+        who.textContent = entry.name + ' · ' + entry.score.toLocaleString();
+        id.textContent = entry.deviceId;
+        who.appendChild(id);
+        row.append(who,
+          button('Rename', () => showTouchKeyboard({ title: 'New username for ' + entry.name, maxLength: 12, onDone: name => act('rename', { deviceId: entry.deviceId, name }) })),
+          button('Wipe score', () => act('wipe', { deviceId: entry.deviceId, board }), true),
+          button('Ban device', () => { if (confirm('Ban this device and wipe its scores?')) act('ban', { deviceId: entry.deviceId }); }, true));
+        section.appendChild(row);
+      }
+      boards.appendChild(section);
+    }
+    const banned = $('banned');
+    banned.textContent = view.banned.length ? '' : 'None';
+    for (const deviceId of view.banned) {
+      const row = document.createElement('div'), who = document.createElement('div');
+      row.className = 'row';
+      who.className = 'who';
+      who.textContent = deviceId;
+      row.append(who, button('Unban', () => act('unban', { deviceId })));
+      banned.appendChild(row);
+    }
+  }
+
+  function open() {
+    call('view').then(view => { memory.set(password); draw(view); }).catch(problem => {
+      if (problem.message !== 'denied') $('message').textContent = 'Couldn’t reach the server. It may be waking up, so try again in a minute.';
+    });
+  }
+  $('signIn').addEventListener('click', () => { password = $('password').value; $('password').value = ''; open(); });
+  $('refresh').addEventListener('click', open);
+  $('signOut').addEventListener('click', () => signedOut(''));
+  if (password) open();
+</script>
+</body>
+</html>

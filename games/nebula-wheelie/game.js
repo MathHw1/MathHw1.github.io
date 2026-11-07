@@ -31,7 +31,22 @@ const GHOST_SEND_SECONDS = 0.1;
 const GHOST_SHIFT = 46;            // pixels the ghost sits behind you when you're level
 const GHOST_MOST_BEHIND = 40;      // how far the ghost can drift from that spot, so it stays on screen
 const GHOST_MOST_AHEAD = 30;       // and it never rides out in front of you, where it would hide the road
+const GHOST_SPACING = 30;           // each extra ghost sits this much further back
 const LEADERBOARD_GAME = 'wheelie';
+const RACE_GAME_OVER_SECONDS = 1.5;
+
+const METRES_PER_MILE = 1609.344;
+const MPH_PER_METRE_SECOND = 2.237;
+const LEVEL_METRES = 300;
+const LEVEL_NAMES = ['Easy', 'Medium', 'Hard', 'Extreme'];
+const MOVING_FROM_LEVEL = 4;       // barriers start rolling towards you
+const SWAPPING_FROM_LEVEL = 7;     // obstacles change at the last moment
+const PAIRS_FROM_LEVEL = 10;       // two obstacles back to back
+const SWAP_SECONDS = 1.05;         // how far ahead a swap happens
+const DRIFT_SPEED = 4;
+const SURGE_METRES = 180;
+const PLOW_METRES = 280;
+const CRASH_SHOW_SECONDS = 1.4;    // the rider tumbles this long before the results come up
 
 const VEHICLES = [
     { id: 'dirt', kind: 'bike', name: 'Dirt Bike', cost: 0, color: '#f97316', about: 'Your first ride.' },
@@ -90,10 +105,12 @@ function load() {
 const save = load();
 function store() {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (_) {}
+    NebulaProfile.setStats('wheelie', { save });
 }
 const activeMissions = () => MISSIONS.filter(m => !save.done.includes(m.id)).slice(0, 3);
 const myVehicle = () => VEHICLES.find(v => v.id === save.vehicle) || VEHICLES[0];
 const money = n => '$' + Math.floor(n).toLocaleString();
+const miles = metres => (metres / METRES_PER_MILE).toFixed(2) + ' mi';
 
 // ---------- Sound ----------
 
@@ -133,7 +150,7 @@ const sound = {
 
 const input = { gas: false, brake: false };
 let state = null;        // the current ride
-let screen = 'menu';     // menu, race, board, riding, paused or over
+let screen = 'menu';     // menu, race, board, riding, crashing, paused or over
 
 // Gives the same numbers from the same seed, so both racers get the exact same road.
 function seededRandom(seed) {
@@ -161,7 +178,8 @@ function newRun(seed) {
         countdown: race.on ? COUNTDOWN_SECONDS : 0, sendIn: 0,
         // Each kind of thing gets its own numbers, so they stay matched between two players
         // however much of the road each one has reached.
-        roll: { obstacle: seededRandom(seed), cash: seededRandom(seed + 1), power: seededRandom(seed + 2) }
+        roll: { obstacle: seededRandom(seed), cash: seededRandom(seed + 1), power: seededRandom(seed + 2) },
+        level: 1, flash: 0, mileMs: 0, rig: newRig(), bits: [], ragdoll: null, wreck: null, crashFor: 0
     };
     show('riding');
     if (!race.on) say('Hold GAS! Don’t let the wheel touch down', 2400);
@@ -172,9 +190,18 @@ function newRun(seed) {
 function spawn() {
     const s = state, ahead = s.rider.distance + LOOK_AHEAD;
     while (s.nextObstacle < ahead) {
+        const level = levelAt(s.nextObstacle);
         const types = s.nextObstacle < 250 ? ['barrier', 'beam'] : Object.keys(P.OBSTACLES);
-        s.things.push({ kind: 'obstacle', type: types[Math.floor(s.roll.obstacle() * types.length)], x: s.nextObstacle });
-        s.nextObstacle += Math.max(30, 70 - s.nextObstacle / 40) + s.roll.obstacle() * 26;
+        const thing = { kind: 'obstacle', type: types[Math.floor(s.roll.obstacle() * types.length)], x: s.nextObstacle };
+        const trick = s.roll.obstacle(), blocks = thing.type === 'barrier' || thing.type === 'beam';
+        if (blocks && level >= SWAPPING_FROM_LEVEL && trick < 0.3) thing.swaps = true;
+        else if (thing.type === 'barrier' && level >= MOVING_FROM_LEVEL && trick < 0.65) thing.drifts = true;
+        s.things.push(thing);
+        if (blocks && level >= PAIRS_FROM_LEVEL) {
+            s.nextObstacle += 26;
+            s.things.push({ kind: 'obstacle', type: thing.type === 'barrier' ? 'beam' : 'barrier', x: s.nextObstacle });
+        }
+        s.nextObstacle += obstacleGap(level) + s.roll.obstacle() * obstacleGap(level) * 0.4;
     }
     while (s.nextCash < ahead) {
         const high = s.roll.cash() < 0.5, roll = s.roll.cash();
@@ -182,9 +209,32 @@ function spawn() {
         s.nextCash += 90 + s.roll.cash() * 90;
     }
     while (s.nextPower < ahead) {
-        const type = ['shield', 'nitro', 'double'][Math.floor(s.roll.power() * 3)];
+        const type = ['shield', 'nitro', 'double', 'surge', 'plow'][Math.floor(s.roll.power() * 5)];
         s.things.push({ kind: 'power', type, x: s.nextPower });
         s.nextPower += 240 + s.roll.power() * 220;
+    }
+}
+
+const levelAt = distance => 1 + Math.floor(distance / LEVEL_METRES);
+const levelTier = level => Math.min(LEVEL_NAMES.length - 1, Math.floor((level - 1) / 3));
+
+// Metres between obstacles: roomy at first, then shrinking faster and faster.
+function obstacleGap(level) {
+    if (level <= 3) return 76 - 5 * level;
+    if (level <= 6) return 72 - 6 * level;
+    if (level <= 9) return 60 - 4 * level;
+    return Math.max(20, 26 * Math.pow(0.95, level - 10));
+}
+
+// Called as you reach each new level.
+function setLevel(s, level) {
+    const r = s.rider, grown = 0.5 * (Math.pow(1.22, level - 1) - 1);
+    s.level = level;
+    r.levelSpeed = Math.min(26, grown);
+    r.levelPush = Math.min(3, 1 + 0.08 * (level - 1));
+    if (level > 1) {
+        say('Level ' + level + ': ' + LEVEL_NAMES[levelTier(level)] + '!', 1500);
+        sound.beep(880, 0.25);
     }
 }
 
@@ -202,12 +252,28 @@ function grabPower(t) {
     if (t.type === 'shield') { r.shields++; say('🛡️ Shield ready!', 1000); }
     if (t.type === 'nitro') { r.nitroUntil = r.distance + NITRO_METRES; say('🔥 Nitro! Double points', 1000); }
     if (t.type === 'double') { s.cashDoubleUntil = r.distance + DOUBLE_CASH_METRES; say('💵 Double cash!', 1000); }
+    if (t.type === 'surge') { r.surgeUntil = r.distance + SURGE_METRES; say('⚡ Speed boost!', 1000); }
+    if (t.type === 'plow') { r.plowUntil = r.distance + PLOW_METRES; say('💥 Plow ready! Smash the barriers', 1200); }
     sound.beep(1200, 0.2);
 }
 
-function meetThings() {
+// Pieces of a smashed barrier, flung off the plow.
+function smash(x) {
+    for (let i = 0; i < 14; i++) {
+        state.bits.push({ x, y: 400 - Math.random() * 40, vx: 120 + Math.random() * 420, vy: -160 - Math.random() * 320, spin: Math.random() * 6, life: 1, color: i % 2 ? '#dc2626' : '#f8fafc' });
+    }
+}
+
+function meetThings(passed) {
     const s = state, r = s.rider, front = r.distance + FRONT_REACH;
     s.things = s.things.filter(t => {
+        if (t.drifts && t.x - front < 70) t.x -= DRIFT_SPEED * passed;
+        if (t.swaps && t.x - front < r.speed * SWAP_SECONDS) {
+            t.swaps = false;
+            t.type = t.type === 'barrier' ? 'beam' : 'barrier';
+            t.warned = false;
+            s.flash = 1;
+        }
         if (t.kind === 'obstacle' && !t.warned && t.x - front < r.speed * 1.6) {
             t.warned = true;
             say(P.OBSTACLES[t.type].hint, 900);
@@ -216,11 +282,12 @@ function meetThings() {
         if (t.kind === 'cash') grabCash(t);
         else if (t.kind === 'power') grabPower(t);
         else {
-            const needsSkill = t.type === 'barrier' || t.type === 'beam';
+            const needsSkill = t.type === 'barrier' || t.type === 'beam', smashing = needsSkill && r.distance < r.plowUntil;
             if (P.meetObstacle(r, t.type) && needsSkill && !r.crashed) {
                 s.cleared++;
                 r.score += CLEAR_REWARD * r.multiplier;
-                say('+' + CLEAR_REWARD * r.multiplier + ' cleared!', 600);
+                say(smashing ? '💥 Smashed!' : '+' + CLEAR_REWARD * r.multiplier + ' cleared!', 600);
+                if (smashing) { smash(viewWidth * BIKE_X + FRONT_REACH * PIXELS_PER_METRE); s.shake = 8; sound.beep(160, 0.15); }
             }
         }
         return false;
@@ -257,181 +324,197 @@ function endRun() {
     sound.silence();
     sound.beep(120, 0.5);
     s.shake = 18;
+    startWipeout(s);
     $('overTitle').textContent = text[0];
     $('overText').textContent = newBest && r.score > 0 ? '🏆 New best score!' : text[1];
     $('overScore').textContent = Math.floor(r.score).toLocaleString();
-    $('overDist').textContent = Math.floor(r.distance) + 'm';
+    $('overDist').textContent = miles(r.distance);
     $('overCash').textContent = '+' + money(s.cash);
+    $('overLevel').textContent = s.level;
     fillMissions($('overMissions'), s.doneThisRun);
-    show('over');
-    saveScore(r.score);
+    $('overRace').textContent = '';
+    show('crashing');
+    saveRun(s);
     race.finished(r);
 }
 
 // ---------- Leaderboard ----------
 
-function saveScore(score) {
-    const points = Math.floor(score);
+const NEW_STATS = { miles: 0, level: 1, mileMs: 0, runs: 0, wins: 0, losses: 0 };
+
+function saveRun(s) {
+    const r = s.rider, stats = NebulaProfile.stats('wheelie', NEW_STATS);
+    const totalMiles = stats.miles + r.distance / METRES_PER_MILE;
+    const fastest = s.mileMs && (!stats.mileMs || s.mileMs < stats.mileMs) ? s.mileMs : stats.mileMs;
+    NebulaProfile.setStats('wheelie', { miles: totalMiles, level: Math.max(stats.level, s.level), mileMs: fastest, runs: stats.runs + 1 });
+
     const line = $('overRank');
     $('overSaveName').classList.add('hidden');
     line.textContent = '';
-    if (points < 1) return;
-    NebulaScores.addLocal(LEADERBOARD_GAME, points);
-    if (!NebulaScores.getName()) { $('overSaveName').classList.remove('hidden'); return; }
-    sendScore(points);
+    const scored = NebulaScores.record('wheelie:score', r.score);
+    if (s.level > stats.level) NebulaScores.record('wheelie:level', s.level);
+    NebulaScores.record('wheelie:miles', totalMiles * 100);
+    if (s.mileMs) NebulaScores.record('wheelie:time', s.mileMs);
+    showRank(scored);
+    if (r.score >= 1 && !NebulaProfile.name()) $('overSaveName').classList.remove('hidden');
 }
 
-function sendScore(points) {
+function showRank(reply) {
+    if (!reply) return;
     const line = $('overRank');
-    NebulaScores.send(LEADERBOARD_GAME, points)
-        .then(reply => { line.textContent = '🏆 You’re #' + reply.rank + ' on the leaderboard!'; })
-        .catch(() => { line.textContent = 'Saved here. The leaderboard couldn’t be reached right now.'; });
+    reply.then(result => { line.textContent = '🏆 You’re #' + result.rank + ' on the leaderboard!'; })
+        .catch(problem => { line.textContent = problem.message; });
 }
 
-let boardTab = 'everyone';
-async function fillBoard() {
-    const list = $('boardList');
-    $('boardEveryone').classList.toggle('on', boardTab === 'everyone');
-    $('boardMine').classList.toggle('on', boardTab === 'mine');
-    $('boardName').textContent = NebulaScores.getName() || 'No name yet';
-    const draw = rows => {
-        list.textContent = '';
-        rows.forEach((row, i) => {
-            const item = document.createElement('li');
-            const name = document.createElement('span');
-            name.textContent = (i + 1) + '. ' + row.name;
-            const score = document.createElement('b');
-            score.textContent = row.score.toLocaleString();
-            item.append(name, score);
-            list.appendChild(item);
-        });
-        if (!rows.length) list.innerHTML = '<li class="empty">No scores yet. Go set one!</li>';
-    };
-    if (boardTab === 'mine') { draw(NebulaScores.local(LEADERBOARD_GAME)); return; }
-    list.innerHTML = '<li class="empty">Loading…</li>';
-    try {
-        const rows = await NebulaScores.everyone(LEADERBOARD_GAME);
-        if (boardTab === 'everyone') draw(rows);
-    } catch (_) {
-        if (boardTab === 'everyone') list.innerHTML = '<li class="empty">Couldn’t reach the leaderboard. The server may be waking up, so try again in a minute.</li>';
-    }
-}
-
-// ---------- Racing a friend ----------
+// ---------- Racing friends ----------
 
 const race = {
-    lobby: null, on: false, seat: 0, friend: null, friendResult: null, myResult: null, wantMine: false, wantTheirs: false, gone: false,
+    lobby: null, on: false, racers: [], friends: new Map(), results: new Map(), resultsShown: false,
 
     connect() {
         this.leave();
         this.lobby = new NebulaLobby('wheelie', {
-            onWaiting: code => {
-                $('raceCode').textContent = code;
-                $('raceStart').classList.add('hidden');
-                $('raceWait').classList.remove('hidden');
-                raceMessage('');
-            },
-            onStart: seat => {
-                this.seat = seat;
-                this.on = true;
-                if (seat === 0) this.go();
-            },
+            onWaiting: code => this.showLobby(code),
+            onStart: () => {},
+            onRoster: () => this.rosterChanged(),
             onMessage: msg => this.receive(msg),
             onStatus: text => {
                 if (screen === 'race') raceMessage(text);
                 else if (text) say(text, 2500);
             },
-            onOpponentAway: () => say('📡 Your friend’s connection dropped', 2000),
-            onOpponentBack: () => say('Your friend is back!', 1500),
-            onOpponentLeft: () => {
-                this.friend = null;
-                this.gone = true;
-                if (this.on && !this.friendResult) this.friendResult = { left: true };
-                this.showResult();
-                say('Your friend left the race', 2200);
+            onOpponentAway: () => {},
+            onOpponentBack: () => {},
+            onOpponentLeft: () => {},
+            onKicked: () => {
+                this.leave();
+                raceReset();
+                show('race');
+                raceMessage('The host removed you from the lobby.');
             },
             onError: text => {
                 if (screen === 'race') { raceMessage(text); raceReset(); }
                 else say(text, 3000);
             }
-        });
+        }, { manualStart: true });
     },
 
-    // The host picks the road, so both players get the same one.
+    showLobby(code) {
+        $('raceCode').textContent = code;
+        $('raceStart').classList.add('hidden');
+        $('raceWait').classList.remove('hidden');
+        raceMessage('');
+    },
+
+    rosterChanged() {
+        const lobby = this.lobby;
+        if (!lobby || !lobby.roster) return;
+        lobby.roster.seats.forEach((seat, n) => { if (!seat) { this.friends.delete(n); this.racers = this.racers.filter(r => r !== n); } });
+        NebulaLobby.fillRoster($('raceRoster'), lobby);
+        NebulaLobby.fillRoster($('overRoster'), lobby);
+        const count = lobby.roster.seats.filter(Boolean).length;
+        $('raceGo').classList.toggle('hidden', !lobby.isHost);
+        $('raceGo').disabled = count < 2;
+        $('raceHint').textContent = lobby.isHost ? (count < 2 ? 'Waiting for at least one friend…' : 'Press Start when everyone’s in.') : 'The host will start the race.';
+        if (this.on) this.showResult();
+    },
+
+    nameOf(seat) {
+        const person = this.lobby && this.lobby.roster && this.lobby.roster.seats[seat];
+        return person ? person.name : 'Friend';
+    },
+
+    // Who the race has to wait for.
+    away() {
+        if (!this.on || !this.lobby || !this.lobby.roster) return [];
+        return this.racers.filter(n => n !== this.lobby.seat && !this.results.has(n) && this.lobby.roster.seats[n] && this.lobby.roster.seats[n].away);
+    },
+
+    // The host picks the road, so everyone gets the same one.
     go() {
-        const seed = newSeed();
-        this.lobby.send({ t: 'go', seed });
-        this.begin(seed);
+        const lobby = this.lobby;
+        if (!lobby || !lobby.isHost) return;
+        const seed = newSeed(), racers = lobby.roster.seats.flatMap((seat, n) => seat ? [n] : []);
+        if (racers.length < 2) return;
+        lobby.send({ t: 'go', seed, racers });
+        this.begin(seed, racers);
     },
 
-    begin(seed) {
-        this.friend = null;
-        this.friendResult = this.myResult = null;
-        this.wantMine = this.wantTheirs = false;
+    begin(seed, racers) {
+        this.lobby.started = true;
+        this.on = true;
+        this.racers = racers;
+        this.friends.clear();
+        this.results.clear();
+        this.resultsShown = false;
+        $('overRoster').textContent = '';
         newRun(seed);
     },
 
     receive(msg) {
         if (!msg) return;
-        if (msg.t === 'go' && Number.isFinite(msg.seed)) this.begin(msg.seed);
-        else if (msg.t === 'pos' && Number.isFinite(msg.d) && Number.isFinite(msg.a)) {
-            const vehicle = VEHICLES.find(v => v.id === msg.v) || VEHICLES[0];
-            this.friend = { distance: msg.d, angle: Math.max(0, Math.min(120, msg.a)), vehicle };
+        if (msg.t === 'go' && Number.isFinite(msg.seed) && Array.isArray(msg.racers)) {
+            if (msg.racers.includes(this.lobby.seat)) this.begin(msg.seed, msg.racers);
         }
-        else if (msg.t === 'done') {
-            this.friend = null;
-            this.friendResult = { score: Number(msg.score) || 0, distance: Number(msg.distance) || 0 };
+        else if (msg.t === 'pos' && Number.isInteger(msg.s) && Number.isFinite(msg.d) && Number.isFinite(msg.a)) {
+            const old = this.friends.get(msg.s);
+            this.friends.set(msg.s, {
+                distance: msg.d, angle: Math.max(0, Math.min(120, msg.a)), vehicle: VEHICLES.find(v => v.id === msg.v) || VEHICLES[0],
+                rig: old ? old.rig : newRig(), spin: old ? (msg.a - old.angle) / GHOST_SEND_SECONDS : 0
+            });
+        }
+        else if (msg.t === 'done' && Number.isInteger(msg.s)) {
+            this.friends.delete(msg.s);
+            this.results.set(msg.s, Number(msg.score) || 0);
+            if (screen === 'riding') say(this.nameOf(msg.s) + ' crashed with ' + Math.floor(msg.score).toLocaleString() + '!', 2000);
             this.showResult();
-            if (screen === 'riding') say('Your friend crashed! Beat ' + Math.floor(this.friendResult.score).toLocaleString(), 2000);
-        }
-        else if (msg.t === 'again') {
-            this.wantTheirs = true;
-            if (this.wantMine && this.seat === 0) this.go();
-            else if (screen === 'over') $('overRace').textContent = 'Your friend wants a rematch!';
         }
     },
 
     sendPosition(r) {
-        this.lobby.sendLive({ t: 'pos', d: r.distance, a: r.angle, v: save.vehicle });
+        this.lobby.sendLive({ t: 'pos', s: this.lobby.seat, d: r.distance, a: r.angle, v: save.vehicle });
     },
 
     finished(r) {
         if (!this.on) return;
-        this.myResult = { score: r.score, distance: r.distance };
-        this.lobby.send({ t: 'done', score: r.score, distance: r.distance });
+        this.results.set(this.lobby.seat, r.score);
+        this.lobby.send({ t: 'done', s: this.lobby.seat, score: r.score });
         this.showResult();
     },
 
     showResult() {
-        const line = $('overRace'), mine = this.myResult, theirs = this.friendResult;
-        if (screen !== 'over' || !mine) return;
-        if (!theirs) line.textContent = '🏁 Your friend is still riding…';
-        else if (theirs.left) line.textContent = '🏆 You win! Your friend left the race.';
-        else if (Math.floor(mine.score) === Math.floor(theirs.score)) line.textContent = '🤝 It’s a tie!';
+        const line = $('overRace'), me = this.lobby ? this.lobby.seat : null;
+        if (!this.results.has(me) || screen === 'riding') return;
+        const left = this.racers.filter(n => !this.results.has(n)), order = [...this.results].sort((a, b) => b[1] - a[1]);
+        const place = order.findIndex(([seat]) => seat === me) + 1;
+        if (left.length) line.textContent = '🏁 Still riding: ' + left.map(n => this.nameOf(n)).join(', ');
         else {
-            const friend = Math.floor(theirs.score).toLocaleString();
-            line.textContent = mine.score > theirs.score ? '🏆 You won the race! Your friend scored ' + friend + '.' : 'Your friend won the race with ' + friend + '.';
+            line.textContent = order.map(([seat, score], i) => (i + 1) + '. ' + (seat === me ? 'You' : this.nameOf(seat)) + ' ' + Math.floor(score).toLocaleString()).join('   ');
+            if (!this.resultsShown && order.length > 1) {
+                this.resultsShown = true;
+                const stats = NebulaProfile.stats('wheelie', NEW_STATS);
+                NebulaProfile.setStats('wheelie', place === 1 ? { wins: stats.wins + 1 } : { losses: stats.losses + 1 });
+                $('overTitle').textContent = place === 1 ? '🏆 You won the race!' : 'You came ' + ['', '1st', '2nd', '3rd', '4th'][place];
+            }
         }
-        $('againBtn').textContent = this.gone ? 'Ride again' : 'Race again';
-    },
-
-    again() {
-        if (!this.lobby || this.gone) { newRun(); return; }
-        this.wantMine = true;
-        this.lobby.send({ t: 'again' });
-        if (this.wantTheirs && this.seat === 0) this.go();
-        else $('overRace').textContent = 'Waiting for your friend…';
+        const ready = !left.length && this.lobby.isHost;
+        $('againBtn').textContent = ready ? 'Race again' : 'Waiting…';
+        $('againBtn').disabled = !ready;
     },
 
     leave() {
-        this.on = this.gone = false;
-        this.friend = this.friendResult = this.myResult = null;
-        this.wantMine = this.wantTheirs = false;
+        this.on = false;
+        this.racers = [];
+        this.friends.clear();
+        this.results.clear();
         $('overRace').textContent = '';
+        $('overRoster').textContent = '';
         $('againBtn').textContent = 'Ride again';
+        $('againBtn').disabled = false;
         if (this.lobby) { const lobby = this.lobby; this.lobby = null; lobby.leave(); }
     }
 };
+
+const fillBoard = NebulaScores.mount($('boardMount'), [LEADERBOARD_GAME]);
 
 function raceMessage(text) {
     $('raceMsg').textContent = text;
@@ -456,6 +539,7 @@ function show(name) {
     if (name === 'menu') fillMenu();
     if (name === 'garage') fillGarage();
     if (name === 'board') fillBoard();
+    if (name === 'over') race.showResult();
     last = performance.now();
 }
 
@@ -553,7 +637,7 @@ function pause() { if (screen === 'riding') show('paused'); }
 
 // ---------- Drawing ----------
 
-const canvas = $('game'), ctx = canvas.getContext('2d');
+const canvas = $('game'), ctx = canvas.getContext('2d', { desynchronized: true });
 let viewWidth = 960, scale = 1;
 
 function resize() {
@@ -657,7 +741,18 @@ function drawCash(t, x) {
 }
 
 function drawPower(t, x) {
-    const icon = { shield: '🛡️', nitro: '🔥', double: '💵' }[t.type];
+    const icon = { shield: '🛡️', nitro: '🔥', double: '💵', surge: '⚡', plow: '💥' }[t.type];
+    const glow = t.type === 'surge' ? '56,189,248' : t.type === 'plow' ? '250,204,21' : null;
+    if (glow) {
+        const pulse = 44 + Math.sin(performance.now() / 130) * 8;
+        const halo = ctx.createRadialGradient(x, 322, 18, x, 322, pulse);
+        halo.addColorStop(0, 'rgba(' + glow + ',.85)');
+        halo.addColorStop(1, 'rgba(' + glow + ',0)');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        circle(x, 322, pulse);
+        ctx.fill();
+    }
     shape('rgba(255,255,255,.85)', 4, () => circle(x, 322, 25));
     ctx.font = '27px system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -669,7 +764,7 @@ function drawThings(s) {
     const bikeX = viewWidth * BIKE_X;
     for (const t of s.things) {
         const x = bikeX + (t.x - s.rider.distance) * PIXELS_PER_METRE;
-        if (x < -130 || x > viewWidth + 130) continue;
+        if (!(x >= -130 && x <= viewWidth + 130)) continue;
         if (t.kind === 'cash') drawCash(t, x);
         else if (t.kind === 'power') drawPower(t, x);
         else drawObstacle(t, x);
@@ -697,35 +792,172 @@ function wheel(x, y, radius, spin, big) {
     shape('#f97316', 3, () => circle(x, y, radius * 0.16));
 }
 
-function drawRider(color, x, y) {
-    // Black pants and boots
-    shape(null, 16, () => line([[x + 2, y + 2], [x + 22, y + 26], [x + 34, y + 40]]));
-    ctx.strokeStyle = '#2b2f3d';
-    ctx.lineWidth = 10;
+// ---------- The rider ----------
+
+// Two-bone reach, as for a leg from hip to foot. Returns the knee or elbow.
+function joint(from, to, firstBone, secondBone, bend) {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const reach = Math.min(Math.hypot(dx, dy) || 1, firstBone + secondBone - 0.5);
+    const along = (reach * reach + firstBone * firstBone - secondBone * secondBone) / (2 * reach);
+    const out = Math.sqrt(Math.max(0, firstBone * firstBone - along * along));
+    const ux = dx / (Math.hypot(dx, dy) || 1), uy = dy / (Math.hypot(dx, dy) || 1);
+    return { x: from.x + ux * along - uy * out * bend, y: from.y + uy * along + ux * out * bend };
+}
+
+// Lean and crouch run on soft springs, so the body lags behind the bike instead of snapping.
+const newRig = () => ({ lean: 0, leanSpeed: 0, crouch: 0, crouchSpeed: 0, slide: 0, slideSpeed: 0, lastSpin: 0 });
+
+function moveRig(rig, angle, spin, gas, brake, passed) {
+    const dt = Math.min(passed, 0.05);
+    const leanTo = Math.min(angle, 85) * 0.58 + (brake ? 9 : 0) - (gas ? 5 : 0);
+    rig.leanSpeed += (70 * (leanTo - rig.lean) - 13 * rig.leanSpeed) * dt;
+    rig.lean += rig.leanSpeed * dt;
+    // A sudden kick from the road squashes the knees and elbows, and they spring back.
+    rig.crouchSpeed += (Math.abs(spin - rig.lastSpin) * 0.5 + 95 * (-rig.crouch) - 12 * rig.crouchSpeed) * dt;
+    rig.crouch += rig.crouchSpeed * dt;
+    rig.crouch = Math.max(-0.4, Math.min(1.2, rig.crouch));
+    rig.lastSpin = spin;
+    // Weight slides back on the gas and forward on the brake.
+    const slideTo = (brake ? 7 : 0) - (gas ? 5 : 0);
+    rig.slideSpeed += (60 * (slideTo - rig.slide) - 12 * rig.slideSpeed) * dt;
+    rig.slide += rig.slideSpeed * dt;
+}
+
+// Where each body part sits on the bike, in the bike's own frame.
+function pose(rig) {
+    const tilt = (14 + rig.lean) * Math.PI / 180;
+    const hip = { x: 12 + rig.slide, y: -58 + rig.crouch * 10 };
+    const across = Math.sin(tilt), up = Math.cos(tilt);
+    const neck = { x: hip.x + across * 54, y: hip.y - up * 54 };
+    const head = { x: neck.x + across * 24, y: neck.y - up * 24 };
+    const foot = { x: 44, y: -14 }, hand = { x: 70, y: -66 };
+    return { hip, neck, head, foot, hand, knee: joint(hip, foot, 32, 34, -1), elbow: joint(neck, hand, 32, 32, 1) };
+}
+
+function limb(points, width, color) {
+    ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = width + 7;
     ctx.beginPath();
-    line([[x + 2, y + 2], [x + 22, y + 26], [x + 34, y + 40]]);
+    line(points.map(p => [p.x, p.y]));
     ctx.stroke();
-    shape('#fff', 4, () => ctx.roundRect(x + 24, y + 36, 26, 13, 4));
-
-    // White jersey with a coloured stripe
-    shape('#f8fafc', 5, () => ctx.roundRect(x - 13, y - 52, 29, 58, 12));
-    ctx.fillStyle = color;
-    ctx.fillRect(x - 10, y - 26, 24, 8);
-
-    // Arm reaching to the bars
-    shape(null, 13, () => line([[x + 3, y - 42], [x + 26, y - 28], [x + 46, y - 34]]));
-    ctx.strokeStyle = '#f8fafc';
-    ctx.lineWidth = 7;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
     ctx.beginPath();
-    line([[x + 3, y - 42], [x + 26, y - 28], [x + 46, y - 34]]);
+    line(points.map(p => [p.x, p.y]));
     ctx.stroke();
-    shape(INK, 0, () => circle(x + 47, y - 34, 6));
+}
 
-    // Black helmet with a visor and peak
-    shape('#1c1f2b', 5, () => circle(x + 5, y - 70, 20));
-    shape('#7dd3fc', 3, () => ctx.roundRect(x + 8, y - 77, 17, 11, 4));
-    shape('#1c1f2b', 4, () => line([[x + 8, y - 88], [x + 34, y - 86], [x + 28, y - 80], [x + 6, y - 80]]));
-    shape(color, 0, () => ctx.rect(x - 11, y - 72, 11, 5));
+function drawHelmet(color, neck, head) {
+    const turn = Math.atan2(head.x - neck.x, neck.y - head.y);
+    ctx.save();
+    ctx.translate(head.x, head.y);
+    ctx.rotate(turn);
+    shape('#1c1f2b', 5, () => circle(0, 0, 20));
+    shape('#7dd3fc', 3, () => ctx.roundRect(3, -7, 17, 11, 4));
+    shape('#1c1f2b', 4, () => line([[3, -18], [29, -16], [23, -10], [1, -10]]));
+    shape(color, 0, () => ctx.rect(-16, -2, 11, 5));
+    ctx.restore();
+}
+
+function drawBody(color, b) {
+    if (b.knee2) {
+        limb([b.hip, b.knee2, b.foot2], 10, '#1c1f2b');
+        limb([b.neck, b.elbow2, b.hand2], 7, '#cbd5e1');
+    }
+    limb([b.hip, b.knee, b.foot], 12, '#2b2f3d');                         // pants
+    shape('#fff', 4, () => { ctx.save(); ctx.translate(b.foot.x, b.foot.y); ctx.rotate(Math.atan2(b.foot.y - b.knee.y, b.foot.x - b.knee.x) - 1.1); ctx.roundRect(-6, -7, 26, 13, 4); ctx.restore(); });
+    limb([b.hip, b.neck], 26, '#f8fafc');                                 // jersey
+    const mid = { x: b.hip.x + (b.neck.x - b.hip.x) * 0.55, y: b.hip.y + (b.neck.y - b.hip.y) * 0.55 };
+    const end = { x: b.hip.x + (b.neck.x - b.hip.x) * 0.68, y: b.hip.y + (b.neck.y - b.hip.y) * 0.68 };
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 24;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    line([[mid.x, mid.y], [end.x, end.y]]);
+    ctx.stroke();
+    limb([b.neck, b.elbow, b.hand], 8, '#f8fafc');                        // arm
+    shape(INK, 0, () => circle(b.hand.x, b.hand.y, 6));
+    drawHelmet(color, b.neck, b.head);
+}
+
+// ---------- Crashing ----------
+
+const RAGDOLL_BONES = [['hip', 'neck'], ['neck', 'head'], ['hip', 'knee'], ['knee', 'foot'], ['hip', 'knee2'], ['knee2', 'foot2'], ['neck', 'elbow'], ['elbow', 'hand'], ['neck', 'elbow2'], ['elbow2', 'hand2'], ['head', 'hip']];
+const RAGDOLL_GRAVITY = 1700, RAGDOLL_STEP = 1 / 90, RAGDOLL_GROUND = 436;
+
+function startWipeout(s) {
+    const r = s.rider, vehicle = myVehicle();
+    const x = viewWidth * BIKE_X - 36, y = 413 + (vehicle.kind === 'truck' ? -11 : 0);
+    const turn = -r.angle * Math.PI / 180, speed = r.speed * PIXELS_PER_METRE;
+    s.wreck = { x, y, angle: turn, vx: speed * 0.35, vy: -220, spin: r.crashed === 'flip' ? -7 : 5, speed: r.speed };
+    if (vehicle.kind !== 'bike') return;
+
+    const b = pose(s.rig);
+    Object.assign(b, { knee2: { x: b.knee.x + 5, y: b.knee.y + 3 }, foot2: { x: b.foot.x + 6, y: b.foot.y }, elbow2: { x: b.elbow.x + 4, y: b.elbow.y + 3 }, hand2: { x: b.hand.x + 4, y: b.hand.y } });
+    const toScreen = p => ({ x: x + p.x * Math.cos(turn) - p.y * Math.sin(turn), y: y + p.x * Math.sin(turn) + p.y * Math.cos(turn) });
+    const parts = {};
+    for (const name in b) {
+        const p = toScreen(b[name]), kick = 1 + Math.random() * 0.25;
+        // Verlet: the gap between now and last holds the speed, so bones can just be pulled back to length.
+        parts[name] = { x: p.x, y: p.y, oldX: p.x - speed * 0.6 * kick * RAGDOLL_STEP, oldY: p.y + (260 + Math.random() * 120) * RAGDOLL_STEP };
+    }
+    const bones = RAGDOLL_BONES.map(([from, to]) => ({ from: parts[from], to: parts[to], length: Math.hypot(parts[to].x - parts[from].x, parts[to].y - parts[from].y) }));
+    s.ragdoll = { parts, bones, spare: 0 };
+}
+
+function moveRagdoll(doll, camera, passed) {
+    doll.spare += Math.min(passed, 0.05);
+    while (doll.spare >= RAGDOLL_STEP) {
+        doll.spare -= RAGDOLL_STEP;
+        for (const p of Object.values(doll.parts)) {
+            const vx = (p.x - p.oldX) * 0.998, vy = (p.y - p.oldY) * 0.998;
+            p.oldX = p.x;
+            p.oldY = p.y;
+            p.x += vx - camera * RAGDOLL_STEP;
+            p.oldX -= camera * RAGDOLL_STEP;
+            p.y += vy + RAGDOLL_GRAVITY * RAGDOLL_STEP * RAGDOLL_STEP;
+        }
+        for (let pass = 0; pass < 6; pass++) {
+            for (const bone of doll.bones) {
+                const dx = bone.to.x - bone.from.x, dy = bone.to.y - bone.from.y, now = Math.hypot(dx, dy) || 1;
+                const fix = (now - bone.length) / now / 2;
+                bone.from.x += dx * fix; bone.from.y += dy * fix;
+                bone.to.x -= dx * fix; bone.to.y -= dy * fix;
+            }
+            for (const p of Object.values(doll.parts)) {
+                if (p.y > RAGDOLL_GROUND) {
+                    p.y = RAGDOLL_GROUND;
+                    p.oldX = p.x - (p.x - p.oldX) * 0.8;      // the road drags on whatever touches it
+                    p.oldY = p.y + (p.y - p.oldY) * 0.3;      // and it bounces a little
+                }
+            }
+        }
+    }
+}
+
+function moveWreck(s, passed) {
+    const w = s.wreck, r = s.rider;
+    w.speed = Math.max(0, w.speed - 18 * passed);
+    r.distance += w.speed * passed;                 // the road slides to a stop
+    const camera = w.speed * PIXELS_PER_METRE;
+    w.vy += RAGDOLL_GRAVITY * passed;
+    w.x += (w.vx - camera * 0.4) * passed;
+    w.y += w.vy * passed;
+    w.angle += w.spin * passed;
+    if (w.y > 413) {
+        w.y = 413;
+        w.vy *= -0.3;
+        w.vx *= 0.7;
+        w.spin *= 0.55;
+    }
+    if (s.ragdoll) moveRagdoll(s.ragdoll, camera, passed);
+    for (const b of s.bits) {
+        b.vy += 900 * passed;
+        b.x += (b.vx - camera) * passed;
+        b.y += b.vy * passed;
+        b.life -= passed;
+    }
 }
 
 function drawDirtBike(color, spin) {
@@ -766,30 +998,40 @@ function drawCar(color, spin, truck) {
     shape('#1c1f2b', 3, () => circle(30, -56 - lift, 11));             // the driver's helmet
 }
 
-function drawVehicle(r, distance, vehicle, shift) {
+function drawVehicle(r, distance, vehicle, shift, rig, wreck) {
     const spin = distance * 2.4;
     const x = viewWidth * BIKE_X - 36 + (shift || 0), y = 413 + (vehicle.kind === 'truck' ? -11 : 0);
     ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(-(r.angle + (r.crashed ? 18 : 0)) * Math.PI / 180);
+    if (wreck) { ctx.translate(wreck.x, wreck.y); ctx.rotate(wreck.angle); }
+    else { ctx.translate(x, y); ctx.rotate(-r.angle * Math.PI / 180); }
     if (vehicle.kind === 'bike') {
         drawDirtBike(vehicle.color, spin);
-        ctx.rotate(Math.min(r.angle, 80) * 0.55 * Math.PI / 180);      // the rider leans forward against the lift
-        drawRider(vehicle.color, 24, -56);
+        if (!wreck) drawBody(vehicle.color, pose(rig || newRig()));
     }
     else drawCar(vehicle.color, spin, vehicle.kind === 'truck');
+    if (r.plowing && !wreck) {
+        const nose = vehicle.kind === 'bike' ? 118 : 165;
+        ctx.globalAlpha *= 0.85;
+        shape('#fde047', 4, () => line([[nose, -44], [nose + 26, -6], [nose, 14]]));
+    }
     ctx.restore();
 }
 
-// Your friend, shaded and drawn behind you. Same road, but they can't touch you or block your view.
-function drawGhost(me) {
-    const friend = race.friend;
-    if (!friend) return;
-    const gap = (friend.distance - me.distance) * PIXELS_PER_METRE;
-    const shift = Math.max(-GHOST_MOST_BEHIND, Math.min(GHOST_MOST_AHEAD, gap)) - GHOST_SHIFT;
+// Your friends, shaded and drawn behind you. Same road, but they can't touch you or block your view.
+function drawGhosts(me) {
+    let place = 0;
     ctx.save();
-    ctx.globalAlpha = 0.42;
-    drawVehicle({ angle: friend.angle }, friend.distance, { ...friend.vehicle, color: '#94a3b8' }, shift);
+    for (const [seat, friend] of race.friends) {
+        const gap = (friend.distance - me.distance) * PIXELS_PER_METRE;
+        const shift = Math.max(-GHOST_MOST_BEHIND, Math.min(GHOST_MOST_AHEAD, gap)) - GHOST_SHIFT - place++ * GHOST_SPACING;
+        ctx.globalAlpha = 0.42;
+        drawVehicle({ angle: friend.angle }, friend.distance, { ...friend.vehicle, color: '#94a3b8' }, shift, friend.rig);
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 13px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(race.nameOf(seat), Math.max(36, viewWidth * BIKE_X + shift - 10), 262 + place * 15);
+    }
     ctx.restore();
 }
 
@@ -834,8 +1076,19 @@ function render() {
     }
     drawWorld(s.rider.distance, s.theme);
     drawThings(s);
-    drawGhost(s.rider);
-    drawVehicle(s.rider, s.rider.distance, myVehicle());
+    drawGhosts(s.rider);
+    s.rider.plowing = s.rider.distance < s.rider.plowUntil;
+    drawVehicle(s.rider, s.rider.distance, myVehicle(), 0, s.rig, s.wreck);
+    if (s.ragdoll) drawBody(myVehicle().color, Object.fromEntries(Object.entries(s.ragdoll.parts)));
+    for (const b of s.bits) {
+        if (b.life <= 0) continue;
+        ctx.fillStyle = b.color;
+        ctx.fillRect(b.x, b.y, 9, 9);
+    }
+    if (s.flash > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,' + (s.flash * 0.22).toFixed(3) + ')';
+        ctx.fillRect(0, 0, viewWidth, VIEW_HEIGHT);
+    }
     if (screen === 'riding') drawGauge(s.rider);
 }
 
@@ -844,7 +1097,9 @@ function updateHud() {
     $('hudScore').textContent = Math.floor(r.score).toLocaleString();
     $('hudMult').textContent = '×' + r.multiplier;
     $('multStat').classList.toggle('hot', r.multiplier > 1);
-    $('hudDist').textContent = Math.floor(r.distance) + 'm';
+    $('hudDist').textContent = miles(r.distance);
+    $('hudMph').textContent = Math.round(r.speed * MPH_PER_METRE_SECOND);
+    $('hudLevel').textContent = s.level + ' ' + LEVEL_NAMES[levelTier(s.level)];
     $('hudCash').textContent = money(s.cash);
     const m = activeMissions()[0];
     $('mission').textContent = m ? m.text + ' (' + Math.floor(Math.min(m.value(s), m.goal)) + '/' + m.goal + ')' : 'All missions done!';
@@ -853,7 +1108,9 @@ function updateHud() {
     if (r.distance < r.nitroUntil) chips.push('🔥 ' + Math.ceil(r.nitroUntil - r.distance) + 'm');
     if (r.distance < s.cashDoubleUntil) chips.push('💵 ' + Math.ceil(s.cashDoubleUntil - r.distance) + 'm');
     if (r.distance < r.oilUntil) chips.push('🛢️ Oil!');
-    if (race.friend) chips.push('👻 Friend ' + Math.floor(race.friend.distance) + 'm');
+    if (r.distance < r.surgeUntil) chips.push('⚡ ' + Math.ceil(r.surgeUntil - r.distance) + 'm');
+    if (r.distance < r.plowUntil) chips.push('💥 ' + Math.ceil(r.plowUntil - r.distance) + 'm');
+    for (const [seat, friend] of race.friends) chips.push('👻 ' + race.nameOf(seat) + ' ' + miles(friend.distance));
     $('boostChips').textContent = chips.join('   ');
 }
 
@@ -865,7 +1122,10 @@ function frame(now) {
     requestAnimationFrame(frame);
     const passed = Math.min((now - last) / 1000, 0.1);
     last = now;
-    if (screen === 'riding') {
+    if (screen === 'riding' && race.away().length) {
+        say('Waiting for ' + race.away().map(n => race.nameOf(n)).join(', ') + ' to come back…', 400);
+    }
+    else if (screen === 'riding') {
         const r = state.rider;
         if (state.countdown > 0) {
             state.countdown -= passed;
@@ -876,19 +1136,47 @@ function frame(now) {
             P.step(r, input, STEP);
             spare -= STEP;
         }
+        moveRig(state.rig, r.angle, r.spin, input.gas, input.brake, passed);
+        if (!state.mileMs && r.distance >= METRES_PER_MILE) {
+            state.mileMs = Math.round(r.time * 1000);
+            say('🏁 First mile done!', 1500);
+        }
         if (r.shieldUsed !== undefined && r.time - r.shieldUsed < passed + STEP) say('🛡️ Shield saved you!', 1100);
+        const level = levelAt(r.distance);
+        if (level !== state.level) setLevel(state, level);
         spawn();
-        meetThings();
+        meetThings(passed);
         checkMissions();
         const theme = Math.floor(r.distance / THEME_EVERY);
         if (theme !== state.theme) { state.theme = theme; say(THEMES[theme % THEMES.length].name, 1800); }
         sound.run(r.speed, input.gas);
         updateHud();
+        for (const friend of race.friends.values()) moveRig(friend.rig, friend.angle, friend.spin, true, false, passed);
         if (race.on && race.lobby) {
             state.sendIn -= passed;
             if (state.sendIn <= 0) { state.sendIn = GHOST_SEND_SECONDS; race.sendPosition(r); }
         }
         if (r.crashed) endRun();
+    }
+    else if (state && state.wreck) {
+        moveWreck(state, passed);
+        for (const friend of race.friends.values()) moveRig(friend.rig, friend.angle, friend.spin, true, false, passed);
+        if (screen === 'crashing') {
+            state.crashFor += passed;
+            if (state.crashFor >= CRASH_SHOW_SECONDS) show('over');
+        }
+    }
+    if (state) {
+        state.flash = Math.max(0, state.flash - passed * 5);
+        if (!state.wreck) {
+            for (const b of state.bits) {
+                b.vy += 900 * passed;
+                b.x += b.vx * passed;
+                b.y += b.vy * passed;
+                b.life -= passed;
+            }
+            state.bits = state.bits.filter(b => b.life > 0);
+        }
     }
     render();
 }
@@ -926,14 +1214,18 @@ function key(e, down) {
 }
 addEventListener('keydown', e => key(e, true));
 addEventListener('keyup', e => key(e, false));
-addEventListener('blur', pause);
-document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+addEventListener('blur', () => { if (!race.on) pause(); });
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) pause();
+    else if (race.on && screen === 'paused') show('riding');
+});
 addEventListener('resize', resize);
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('selectstart', e => e.preventDefault());
 
 $('playBtn').addEventListener('click', () => newRun());
-$('againBtn').addEventListener('click', () => { if (race.on) race.again(); else newRun(); });
+$('againBtn').addEventListener('click', () => { if (race.on) race.go(); else newRun(); });
+$('raceGo').addEventListener('click', () => race.go());
 $('raceBtn').addEventListener('click', () => { raceReset(); raceMessage(''); show('race'); });
 $('raceBack').addEventListener('click', () => { race.leave(); show('menu'); });
 $('raceCreate').addEventListener('click', () => { race.connect(); race.lobby.create(); });
@@ -943,20 +1235,15 @@ $('raceJoin').addEventListener('click', () => {
 });
 $('boardBtn').addEventListener('click', () => show('board'));
 $('boardBack').addEventListener('click', () => show('menu'));
-$('boardEveryone').addEventListener('click', () => { boardTab = 'everyone'; fillBoard(); });
-$('boardMine').addEventListener('click', () => { boardTab = 'mine'; fillBoard(); });
-$('boardRename').addEventListener('click', () => NebulaScores.askName(() => {
-    NebulaScores.hello(LEADERBOARD_GAME);
-    fillBoard();
-}));
 $('overSaveName').addEventListener('click', () => NebulaScores.askName(() => {
     $('overSaveName').classList.add('hidden');
-    sendScore(NebulaScores.best(LEADERBOARD_GAME));
+    showRank(NebulaScores.send('wheelie:score', NebulaScores.best('wheelie:score')));
+    NebulaScores.hello(LEADERBOARD_GAME);
 }));
 $('garageBtn').addEventListener('click', () => show('garage'));
 $('overGarage').addEventListener('click', () => show('garage'));
 $('garageBack').addEventListener('click', () => show('menu'));
-$('overMenu').addEventListener('click', () => { race.leave(); show('menu'); });
+$('overMenu').addEventListener('click', () => { race.leave(); state = null; show('menu'); });
 $('quitBtn').addEventListener('click', () => { save.cash += state.cash; store(); state = null; race.leave(); show('menu'); });
 $('resumeBtn').addEventListener('click', () => show('riding'));
 $('pauseBtn').addEventListener('click', pause);
@@ -973,3 +1260,8 @@ show('menu');
 requestAnimationFrame(frame);
 NebulaLobby.warmUp();
 NebulaScores.hello(LEADERBOARD_GAME);
+// A wiped device gets its bikes and cash back from the backup.
+NebulaProfile.ready.then(() => {
+    const backup = NebulaProfile.stats('wheelie', {}).save;
+    if (!readJson(SAVE_KEY) && backup) { Object.assign(save, backup); store(); fillMenu(); }
+});

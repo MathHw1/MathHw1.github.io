@@ -103,6 +103,12 @@
     <details class="mb-3 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 sm:px-5 py-3">
       <summary class="cursor-pointer select-none font-semibold text-violet-200">🛠️ Bugs &amp; fixes</summary>
       <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
+        <li><b>Tiny Turbo:</b> new racing game with touch controls and 4-player ghost races.</li>
+        <li><b>Wheelie Life:</b> levels, MPH and miles, boost and plow pickups, a smoother rider and real crashes, plus 4-player races.</li>
+        <li><b>Lobbies:</b> hosts can kick players, and games wait if someone steps away.</li>
+        <li><b>Pool:</b> keyboard controls, the cue now aims where you point, and 2v2 teams online.</li>
+        <li><b>Chess:</b> Bullet, Blitz and Rapid clocks with low-time sounds, plus a 1200-start ELO rating.</li>
+        <li><b>Leaderboard:</b> high score, level, miles and fastest time boards, with a name filter.</li>
         <li><b>Wheelie Life:</b> race a friend on the same road with a ghost behind you, and the bike lifts and speeds up faster.</li>
         <li><b>Leaderboard:</b> new high score board, with an on-screen keyboard for typing your name.</li>
         <li><b>Paper.io 2:</b> moved to a link with fewer ads.</li>
@@ -242,6 +248,14 @@ const GAMES = [
     desc: 'Keep your wheel up, dodge obstacles and earn cash for new rides.', 
     img: 'games/nebula-wheelie/cover.jpg?v=2', 
     url: 'games/nebula-wheelie/index.html' 
+  },
+  { 
+    title: 'Tiny Turbo',   
+    genre: 'Racing',   
+    source: 'original', 
+    desc: 'Race three laps, grab coins and take on up to 3 friends online.', 
+    img: 'games/tiny-turbo/cover.svg', 
+    url: 'games/tiny-turbo/index.html' 
   },
   { 
     title: 'Space Waves',   
@@ -622,6 +636,36 @@ const NOTES_ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'
 
 // Starting notes for each subject. Once you type in a subject, your version is saved instead.
 const SUBJECTS = {
+  'Math': `Algebra 1 and Geometry stuff to know
+
+Linear equations
+- Do the same thing to both sides until x is alone.
+- Example: 2x + 3 = 11. Subtract 3 to get 2x = 8, then divide by 2 to get x = 4.
+
+Slope-intercept form: y = mx + b
+- m is the slope and b is where the line crosses the y-axis.
+- Slope = (y₂ - y₁) ÷ (x₂ - x₁), or rise over run.
+
+Systems of linear equations
+- Substitution: solve one equation for a variable, then plug it into the other.
+- Elimination: add the equations so one variable cancels.
+- The answer is the point where the two lines cross.
+
+Quadratic formula, for ax² + bx + c = 0
+x = (-b ± √(b² - 4ac)) ÷ 2a
+
+Distance and midpoint
+- Distance = √((x₂ - x₁)² + (y₂ - y₁)²)
+- Midpoint = ((x₁ + x₂) ÷ 2, (y₁ + y₂) ÷ 2)
+
+Pythagorean theorem
+- a² + b² = c², but only for right triangles.
+- c is the hypotenuse, the side across from the right angle.
+
+Density
+- D = m ÷ V
+- Mass goes on top. Example: 20 g ÷ 4 cm³ = 5 g/cm³.`,
+
   'English': `Stuff I need to remember for English
 
 Parts of a story

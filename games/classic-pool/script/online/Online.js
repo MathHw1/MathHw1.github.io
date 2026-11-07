@@ -1,6 +1,7 @@
 "use strict";
 
-// Online play for Nebula Arcade: two people on different computers, joined by a lobby code.
+// Online play for Nebula Arcade: 2 to 4 people on different computers, joined by a lobby code.
+// With more than two it's teams: seats 0 and 2 against seats 1 and 3, and partners take turns.
 // Both connect to the lobby server (see games/shared/lobby-client.js), which passes messages between them.
 //
 // Each shot runs on both screens. The shooter's game is in charge of that shot: it sends the
@@ -11,7 +12,9 @@ const MAX_SYNC_WAIT_MS = 4000;
 
 function Online_Singleton() {
     this.on = false;            // true while an online match is being played
-    this.myNum = 0;             // 0 = host (Player 1, breaks first), 1 = guest
+    this.myNum = 0;             // our seat. Seat 0 is the host, whose team breaks first
+    this.shooter = 0;           // the seat taking this shot
+    this.nextUp = [0, 0];       // how many turns each team has had, to take turns between partners
     this.lobby = null;
     this.code = '';
     this.status = '';
@@ -22,7 +25,40 @@ function Online_Singleton() {
 }
 
 Online_Singleton.prototype.isRemoteTurn = function () {
-    return this.on && !!Game.policy && Game.policy.turn !== this.myNum;
+    return this.on && !!Game.policy && this.shooter !== this.myNum;
+};
+
+Online_Singleton.prototype.teamOf = function (seat) { return seat % 2; };
+
+Online_Singleton.prototype.team = function (team) {
+    var seats = this.lobby && this.lobby.roster ? this.lobby.roster.seats : [];
+    var list = [];
+    seats.forEach(function (seat, n) { if (seat && n % 2 === team) list.push(n); });
+    return list;
+};
+
+Online_Singleton.prototype.teamName = function (team) {
+    var mine = team === this.teamOf(this.myNum);
+    if (this.team(0).length + this.team(1).length > 2) return mine ? 'Your team' : 'Other team';
+    return mine ? 'You' : 'Opponent';
+};
+
+Online_Singleton.prototype.nameOf = function (seat) {
+    var person = this.lobby && this.lobby.roster && this.lobby.roster.seats[seat];
+    return person ? person.name : 'Your opponent';
+};
+
+Online_Singleton.prototype.turnText = function () {
+    var person = this.lobby && this.lobby.roster && this.lobby.roster.seats[this.shooter];
+    if (person && person.away) return 'Waiting for ' + person.name + ' to come back…';
+    return this.nameOf(this.shooter) + '’s turn…';
+};
+
+// Picks who shoots for the team that's up, moving along so partners share the turns.
+Online_Singleton.prototype.pickShooter = function (team) {
+    var seats = this.team(team);
+    if (!seats.length) return;
+    this.shooter = seats[this.nextUp[team]++ % seats.length];
 };
 
 // ---------- Lobby ----------
@@ -31,10 +67,11 @@ Online_Singleton.prototype.connectLobby = function () {
     var online = this;
     this.lobby = new NebulaLobby('pool', {
         onWaiting: function (code) { online.code = code; online.setStatus('waiting'); },
-        onStart: function (seat) {
-            online.code = online.lobby.code;
-            online.myNum = seat;
-            online.beginMatch();
+        onStart: function () {},
+        onRoster: function () { online.rosterChanged(); },
+        onKicked: function () {
+            online.leave();
+            online.setStatus('The host removed you from the lobby.');
         },
         onMessage: function (msg) { online.receive(msg); },
         onStatus: function (text) {
@@ -44,16 +81,32 @@ Online_Singleton.prototype.connectLobby = function () {
         onOpponentAway: function () { online.notice = 'Opponent reconnecting…'; },
         onOpponentBack: function () { online.notice = ''; },
         onOpponentLeft: function () {
-            online.on = false;
-            online.notice = 'Opponent left';
-            online.setStatus('Your opponent left. You can keep playing here as a 2-player game.');
+            if (!online.on) return;
+            // Someone left: their partner carries on, and the game only stops if nobody's left to play.
+            if (!online.team(0).length || !online.team(1).length) {
+                online.on = false;
+                online.notice = 'Opponent left';
+                online.setStatus('Your opponent left. You can keep playing here as a 2-player game.');
+            }
+            else if (!online.lobby.roster.seats[online.shooter]) online.pickShooter(Game.policy.turn);
         },
         onError: function (text) {
             online.on = false;
             online.notice = online.code ? 'Connection lost' : '';
             online.setStatus(text);
         }
-    });
+    }, { manualStart: true });
+};
+
+Online_Singleton.prototype.rosterChanged = function () {
+    if (this.lobby) this.code = this.lobby.code;
+    if (this.render) this.render();
+};
+
+// Only the host can do this. It tells everyone which seats are playing.
+Online_Singleton.prototype.startMatch = function () {
+    this.send({ t: 'start' });
+    this.beginMatch();
 };
 
 Online_Singleton.prototype.createLobby = function () {
@@ -83,6 +136,10 @@ Online_Singleton.prototype.send = function (msg) {
 // Starts a match on this screen, the same way the 2-player menu button does.
 Online_Singleton.prototype.beginMatch = function () {
     this.on = true;
+    this.myNum = this.lobby.seat;
+    this.lobby.started = true;
+    this.shooter = 0;
+    this.nextUp = [1, 0];
     AI_ON = false;
     this.pendingSync = null;
     this.setStatus('playing');
@@ -98,6 +155,9 @@ Online_Singleton.prototype.beginMatch = function () {
 
 Online_Singleton.prototype.receive = function (msg) {
     switch (msg.t) {
+        case 'start':
+            this.beginMatch();
+            break;
         case 'aim':
             this.showRemoteAim(msg);
             break;
@@ -115,7 +175,9 @@ Online_Singleton.prototype.snapshot = function () {
         balls: Game.gameWorld.balls.map(function (b) {
             return { x: b.position.x, y: b.position.y, visible: b.visible, inHole: b.inHole };
         }),
-        policy: JSON.parse(JSON.stringify(Game.policy))
+        policy: JSON.parse(JSON.stringify(Game.policy)),
+        shooter: this.shooter,
+        nextUp: this.nextUp
     };
 };
 
@@ -129,6 +191,8 @@ Online_Singleton.prototype.applySnapshot = function (state) {
         b.stop();
     });
     Game.policy.initiateState(state.policy);
+    if (Number.isInteger(state.shooter)) this.shooter = state.shooter;
+    if (Array.isArray(state.nextUp)) this.nextUp = state.nextUp;
     world.stick.position = world.whiteBall.position.copy();
 };
 
@@ -151,8 +215,10 @@ Online_Singleton.prototype.playRemoteShot = function (msg) {
 };
 
 // Called after the shooter's game has worked out fouls, scores and whose turn is next.
-Online_Singleton.prototype.sendResult = function (rackOver) {
-    this.send({ t: 'sync', state: this.snapshot(), rackOver: rackOver });
+Online_Singleton.prototype.sendResult = function (rackOver, turnChanged, winner) {
+    if (turnChanged) this.pickShooter(Game.policy.turn);
+    this.send({ t: 'sync', state: this.snapshot(), rackOver: rackOver, winner: winner });
+    if (rackOver) this.countRack(winner);
 };
 
 Online_Singleton.prototype.applyPendingSync = function () {
@@ -160,7 +226,24 @@ Online_Singleton.prototype.applyPendingSync = function () {
     this.pendingSync = null;
     this.applySnapshot(msg.state);
     Game.gameWorld.stick.reset();
-    if (msg.rackOver) setTimeout(function () { Game.gameWorld.reset(); }, 1000);
+    if (msg.rackOver) {
+        this.countRack(msg.winner);
+        setTimeout(function () { Game.gameWorld.reset(); }, 1000);
+    }
+};
+
+// Wins climb the Hustler Ladder, saved on this device.
+Online_Singleton.prototype.countRack = function (winner) {
+    if (typeof winner !== 'number') return;
+    var stats = NebulaProfile.stats('pool', { wins: 0, losses: 0 });
+    if (winner === this.teamOf(this.myNum)) {
+        stats.wins++;
+        var reply = NebulaScores.record('pool:wins', stats.wins);
+        if (reply) reply.catch(function () {});
+    }
+    else stats.losses++;
+    NebulaProfile.setStats('pool', stats);
+    this.notice = NebulaScores.poolRank(stats.wins) + ' · ' + stats.wins + 'W ' + stats.losses + 'L';
 };
 
 Online_Singleton.prototype.showRemoteAim = function (msg) {
@@ -223,7 +306,9 @@ Online_Singleton.prototype.initUI = function () {
         '#lobby .code{font:900 40px ui-monospace,monospace;letter-spacing:.25em;color:#fff;text-align:center;margin:10px 0;' +
         'padding:12px;border-radius:12px;background:#0b0f19;border:1px dashed rgba(167,139,250,.6);user-select:all}' +
         '#lobby .or{text-align:center;margin:14px 0 4px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.1em}' +
-        '#lobby .msg{color:#fbbf24}';
+        '#lobby .msg{color:#fbbf24}' +
+        '#lobby .players{list-style:none;margin:8px 0;padding:0}#lobby .players li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 2px;border-top:1px solid rgba(255,255,255,.1)}' +
+        '#lobby .players button{padding:6px 12px;font-size:13px;background:#dc2626}';
     document.head.appendChild(css);
 
     var btn = document.createElement('button');
@@ -250,35 +335,37 @@ Online_Singleton.prototype.initUI = function () {
         var s = online.status;
         var html = '<div class="box"><h2>🌐 Play Online</h2>';
 
+        var players = '<ul class="players"></ul>';
         if (online.on) {
-            html += '<p>You’re in an online game (lobby <b>' + online.code + '</b>). Press <b>Continue</b> on the menu to go back to it.</p>' +
+            html += '<p>You’re in an online game (lobby <b>' + online.code + '</b>). Press <b>Continue</b> on the menu to go back to it.</p>' + players +
                 '<div class="row" style="justify-content:space-between"><button class="ghost" data-a="close">Back</button>' +
                 '<button data-a="cancel" style="background:#dc2626">Leave online game</button></div>';
-        } else if (s === 'waiting' && online.code) {
-            html += '<p>Send this code to your friend. The game starts as soon as they join.</p>' +
-                '<div class="code">' + online.code + '</div>' +
-                '<p>Waiting for your friend…</p>' +
-                '<div class="row"><button class="ghost" data-a="cancel">Cancel</button></div>';
+        } else if (online.lobby && online.code) {
+            var host = online.lobby.isHost, count = online.lobby.roster ? online.lobby.roster.seats.filter(Boolean).length : 1;
+            html += '<p>Send this code to up to 3 friends. With 3 or 4 players you play in teams.</p>' +
+                '<div class="code">' + online.code + '</div>' + players +
+                '<p>' + (host ? (count < 2 ? 'Waiting for at least one friend…' : 'Press Start when everyone’s in.') : 'The host will start the game.') + '</p>' +
+                '<div class="row">' + (host && count >= 2 ? '<button data-a="start">Start</button>' : '') + '<button class="ghost" data-a="cancel">Leave</button></div>';
         } else {
-            html += '<p>Play pool with a friend on another computer.</p>' +
-                '<div class="row"><button data-a="create" style="flex:1">Create a lobby</button></div>' +
-                '<div class="or">or join one</div>' +
-                '<div class="row"><input id="joinCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false">' +
-                '<button data-a="join">Join</button></div>' +
-                (s && s !== 'playing' ? '<p class="msg">' + s + '</p>' : '') +
+            var stats = NebulaProfile.stats('pool', { wins: 0, losses: 0 });
+            html += '<p>Play pool with up to 3 friends on other devices.</p>' +
+                '<p>Your rank: <b>' + NebulaScores.poolRank(stats.wins) + '</b> (' + stats.wins + ' wins, ' + stats.losses + ' losses)</p>' +
+                '<div class="row"><button data-a="create" style="flex:1">Create a lobby</button>' +
+                '<button data-a="join" style="flex:1">Join with a code</button></div>' +
+                (s && s !== 'playing' && s !== 'waiting' ? '<p class="msg">' + s + '</p>' : '') +
                 '<div class="row" style="justify-content:flex-end"><button class="ghost" data-a="close">Close</button></div>';
         }
         lobby.innerHTML = html + '</div>';
 
-        var input = lobby.querySelector('#joinCode');
-        if (input) {
-            input.addEventListener('keydown', function (e) { if (e.key === 'Enter') online.joinLobby(input.value); });
-        }
+        var list = lobby.querySelector('.players');
+        if (list) NebulaLobby.fillRoster(list, online.lobby);
+
         lobby.querySelectorAll('[data-a]').forEach(function (b) {
             b.addEventListener('click', function () {
                 var a = b.dataset.a;
                 if (a === 'create') online.createLobby();
-                else if (a === 'join') online.joinLobby(input.value);
+                else if (a === 'join') showTouchKeyboard({ title: 'Type your friend’s lobby code', maxLength: 5, exactLength: 5, okLabel: 'Join', onDone: function (code) { online.joinLobby(code); } });
+                else if (a === 'start') online.startMatch();
                 else if (a === 'cancel') { online.leave(); online.setStatus(''); }
                 else if (a === 'close') { open = false; online.render(); }
             });
@@ -312,9 +399,10 @@ var Online = new Online_Singleton();
     var updateTurnOutcome = GamePolicy.prototype.updateTurnOutcome;
     GamePolicy.prototype.updateTurnOutcome = function () {
         var myShot = Online.on && this === Game.policy && this.turnPlayed && !Online.isRemoteTurn();
-        var rackOver = this.won;
+        var rackOver = this.won, turn = this.turn;
+        var fouled = this.foul || this.firstCollision == true;     // a foul on the last ball loses the rack
         var result = updateTurnOutcome.apply(this, arguments);
-        if (myShot) Online.sendResult(rackOver);
+        if (myShot) Online.sendResult(rackOver, this.turn !== turn, fouled ? 1 - turn : turn);
         return result;
     };
 })();

@@ -16,15 +16,6 @@
     h1 { margin:14px 0 4px; font-size:30px; }
     .sub { margin:0 0 20px; color:var(--muted); line-height:1.5; }
     .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
-    h2 { margin:0 0 12px; font-size:19px; }
-    .tabs, .actions { display:flex; gap:8px; }
-    button { flex:1; padding:12px; font:inherit; font-weight:700; color:#fff; background:rgba(255,255,255,.08); border:1px solid var(--line); border-radius:10px; cursor:pointer; touch-action:manipulation; }
-    button.on { background:var(--accent); border-color:var(--accent); }
-    ol { list-style:none; margin:12px 0; padding:0; }
-    li { display:flex; justify-content:space-between; gap:12px; padding:9px 4px; border-top:1px solid var(--line); }
-    li.empty { display:block; color:var(--muted); line-height:1.5; }
-    .name { margin:0 0 12px; color:var(--muted); }
-    .name b { color:var(--text); }
   </style>
 </head>
 <body>
@@ -32,62 +23,15 @@
   <a href="arcade.html">← Back to the arcade</a>
   <h1>🏆 Leaderboard</h1>
   <p class="sub">Your scores save on this device and go on the board for everyone.</p>
-  <div class="card">
-    <h2>🏍️ Wheelie Life</h2>
-    <div class="tabs">
-      <button id="everyone" class="on">Everyone</button>
-      <button id="mine">This device</button>
-    </div>
-    <ol id="list"></ol>
-    <p class="name">Your name: <b id="name"></b></p>
-    <div class="actions"><button id="rename">Change name</button></div>
-  </div>
+  <div class="card"><div id="boards"></div></div>
 </main>
 <script src="games/shared/lobby-client.js"></script>
 <script src="games/shared/touch-keyboard.js"></script>
+<script src="games/shared/profile.js"></script>
 <script src="games/shared/scores.js"></script>
 <script>
-  const GAME = 'wheelie';
-  const list = document.getElementById('list');
-  let tab = 'everyone';
-
-  function draw(rows) {
-    list.textContent = '';
-    rows.forEach((row, i) => {
-      const item = document.createElement('li');
-      const name = document.createElement('span');
-      name.textContent = (i + 1) + '. ' + row.name;
-      const score = document.createElement('b');
-      score.textContent = row.score.toLocaleString();
-      item.append(name, score);
-      list.appendChild(item);
-    });
-    if (!rows.length) note('No scores yet. Go set one!');
-  }
-  function note(text) {
-    list.innerHTML = '<li class="empty"></li>';
-    list.firstChild.textContent = text;
-  }
-
-  async function fill() {
-    document.getElementById('everyone').classList.toggle('on', tab === 'everyone');
-    document.getElementById('mine').classList.toggle('on', tab === 'mine');
-    document.getElementById('name').textContent = NebulaScores.getName() || 'No name yet';
-    if (tab === 'mine') { draw(NebulaScores.local(GAME)); return; }
-    note('Loading…');
-    try {
-      const rows = await NebulaScores.everyone(GAME);
-      if (tab === 'everyone') draw(rows);
-    } catch (_) {
-      if (tab === 'everyone') note('Couldn’t reach the leaderboard. The server may be waking up, so try again in a minute.');
-    }
-  }
-
-  document.getElementById('everyone').addEventListener('click', () => { tab = 'everyone'; fill(); });
-  document.getElementById('mine').addEventListener('click', () => { tab = 'mine'; fill(); });
-  document.getElementById('rename').addEventListener('click', () => NebulaScores.askName(() => { NebulaScores.hello(GAME); fill(); }));
-  NebulaScores.hello(GAME);
-  fill();
+  NebulaScores.mount(document.getElementById('boards'), NebulaScores.GAMES.map(game => game.id));
+  NebulaScores.GAMES.forEach(game => NebulaScores.hello(game.id));
 </script>
 </body>
 </html>

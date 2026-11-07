@@ -1,5 +1,7 @@
 "use strict";
 
+const KEY_TURN_SPEED = 0.025;
+
 function Stick(position){
     this.position = position;
     this.origin = new Vector2(970,11);
@@ -9,6 +11,8 @@ function Stick(position){
     this.rotation = 0;
     this.power = 0;
     this.trackMouse = true;
+    this.keyAiming = false;
+    this.spaceHeld = false;
 }
 
 Stick.prototype.handleInput = function (delta) {
@@ -22,29 +26,42 @@ Stick.prototype.handleInput = function (delta) {
     if(Game.policy.turnPlayed)
       return;
 
-    if(Keyboard.down(Keys.W) && KEYBOARD_INPUT_ON){
+    // Arrow keys or WASD turn the cue. Left and right are quick, up and down are for fine aiming.
+    var turn = 0;
+    if(KEYBOARD_INPUT_ON){
+      if(Keyboard.down(Keys.left) || Keyboard.down(Keys.A)) turn -= 1;
+      if(Keyboard.down(Keys.right) || Keyboard.down(Keys.D)) turn += 1;
+      if(Keyboard.down(Keys.up) || Keyboard.down(Keys.W)) turn -= 0.2;
+      if(Keyboard.down(Keys.down) || Keyboard.down(Keys.S)) turn += 0.2;
+    }
+    if(turn !== 0){
+      this.rotation += turn * KEY_TURN_SPEED;
+      this.keyAiming = true;
+    }
+
+    // Hold Space to build power, and let go to shoot.
+    if(Keyboard.down(Keys.space) && KEYBOARD_INPUT_ON){
+      this.spaceHeld = true;
       if(this.power < 75){
         this.origin.x+=2;
         this.power+=1.2;
       }
     }
-
-    if(Keyboard.down(Keys.S) && KEYBOARD_INPUT_ON){
-      if(this.power>0){
-        this.origin.x-=2;
-        this.power-=1.2;
-      }
+    else if(this.spaceHeld){
+      this.spaceHeld = false;
+      if(this.power>0) this.shoot(this.power, this.rotation);
+      return;
     }
 
-    else if (this.power>0 && Mouse.left.down){
-      this.shoot(this.power, this.rotation);
-    }
-    else if(this.trackMouse){
-      // Point from the mouse to the ball, so the cue sits on the side you click or drag to
-      // and the shot goes away from it, like pulling a real cue back. (It used to point at
-      // the mouse, which put the cue on the opposite side of the ball.)
-      var opposite = this.position.y - Mouse.position.y;
-      var adjacent = this.position.x - Mouse.position.x;
+    var moved = Mouse.position.x !== this.lastMouseX || Mouse.position.y !== this.lastMouseY;
+    this.lastMouseX = Mouse.position.x;
+    this.lastMouseY = Mouse.position.y;
+    if(moved) this.keyAiming = false;
+
+    if(this.trackMouse && !this.keyAiming){
+      // The cue points at the mouse or finger, so the ball goes where you're aiming.
+      var opposite = Mouse.position.y - this.position.y;
+      var adjacent = Mouse.position.x - this.position.x;
       this.rotation = Math.atan2(opposite, adjacent);
     }
 };

@@ -24,7 +24,7 @@ function initScoreboard() {
     document.body.appendChild(bar);
 
     function name(num) {
-        if (Online.on) return num === Online.myNum ? 'You' : 'Opponent';
+        if (Online.on) return Online.teamName(num);
         if (AI_ON) return num === AI_PLAYER_NUM ? 'Computer' : 'You';
         return 'Player ' + (num + 1);
     }

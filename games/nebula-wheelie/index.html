@@ -59,12 +59,9 @@
     #raceMsg { color:#fbbf24; }
     #overRace { color:#fde68a; font-weight:700; }
     #overRank { color:#86efac; font-weight:700; }
-    .tabs { display:flex; gap:8px; margin:8px 0; }
-    .tabs button { flex:1; }
-    .tabs button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
-    #boardList { list-style:none; margin:8px 0; padding:0; max-height:44vh; overflow:auto; touch-action:pan-y; }
-    #boardList li { display:flex; justify-content:space-between; gap:10px; padding:7px 4px; border-top:1px solid var(--line); }
-    #boardList li.empty { display:block; color:var(--muted); }
+    .roster { list-style:none; margin:8px 0; padding:0; }
+    .roster li { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 4px; border-top:1px solid var(--line); }
+    .roster button { padding:6px 12px; font-size:13px; color:#fecaca; }
     .swatch { display:inline-block; width:14px; height:14px; margin-right:7px; border-radius:50%; vertical-align:-2px; }
   </style>
 </head>
@@ -75,7 +72,9 @@
   <div id="stats">
     <div class="stat"><small>Score</small><b id="hudScore">0</b></div>
     <div class="stat" id="multStat"><small>Multiplier</small><b id="hudMult">×1</b></div>
-    <div class="stat"><small>Distance</small><b id="hudDist">0m</b></div>
+    <div class="stat"><small>Speed (MPH)</small><b id="hudMph">0</b></div>
+    <div class="stat"><small>Miles</small><b id="hudDist">0.00 mi</b></div>
+    <div class="stat"><small>Level</small><b id="hudLevel">1 Easy</b></div>
     <div class="stat"><small>Cash</small><b id="hudCash">$0</b></div>
   </div>
   <div id="hudButtons">
@@ -111,15 +110,17 @@
 <div id="race" class="screen hidden">
   <div class="box">
     <h2>🏁 Race a friend</h2>
-    <p>You both ride the exact same road, and your friend shows up as a ghost behind you. Highest score wins.</p>
+    <p>Up to 4 players ride the exact same road, and your friends show up as ghosts behind you. Highest score wins.</p>
     <div id="raceStart" class="row">
       <button id="raceCreate" class="primary">Create a lobby</button>
       <button id="raceJoin">Join with a code</button>
     </div>
     <div id="raceWait" class="hidden">
-      <p>Send this code to your friend. The race starts when they join.</p>
+      <p>Send this code to up to 3 friends.</p>
       <div id="raceCode"></div>
-      <div class="row"><button id="raceCancel">Cancel</button></div>
+      <ul id="raceRoster" class="roster"></ul>
+      <p id="raceHint"></p>
+      <div class="row"><button id="raceGo" class="primary hidden">Start the race</button><button id="raceCancel">Leave</button></div>
     </div>
     <p id="raceMsg" class="hidden"></p>
     <div class="row"><button id="raceBack">Back</button></div>
@@ -129,16 +130,8 @@
 <div id="board" class="screen hidden">
   <div class="box">
     <h2>🏆 Leaderboard</h2>
-    <div class="tabs">
-      <button id="boardEveryone" class="on">Everyone</button>
-      <button id="boardMine">This device</button>
-    </div>
-    <ol id="boardList"></ol>
-    <p>Your name: <b id="boardName"></b></p>
-    <div class="row">
-      <button id="boardRename">Change name</button>
-      <button id="boardBack" class="primary">Back</button>
-    </div>
+    <div id="boardMount"></div>
+    <div class="row"><button id="boardBack" class="primary">Back</button></div>
   </div>
 </div>
 
@@ -167,10 +160,12 @@
     <p id="overText"></p>
     <div class="numbers">
       <div><b id="overScore">0</b>Score</div>
-      <div><b id="overDist">0m</b>Distance</div>
+      <div><b id="overDist">0.00 mi</b>Miles</div>
+      <div><b id="overLevel">1</b>Level</div>
       <div><b id="overCash">$0</b>Cash</div>
     </div>
     <p id="overRace"></p>
+    <ul id="overRoster" class="roster"></ul>
     <p id="overRank"></p>
     <div class="row"><button id="overSaveName" class="hidden">🏆 Add your name to the leaderboard</button></div>
     <ul id="overMissions" class="missions"></ul>
@@ -185,6 +180,7 @@
 <script src="../shared/socket.io.min.js"></script>
 <script src="../shared/lobby-client.js"></script>
 <script src="../shared/touch-keyboard.js"></script>
+<script src="../shared/profile.js"></script>
 <script src="../shared/scores.js"></script>
 <script src="physics.js"></script>
 <script src="game.js"></script>

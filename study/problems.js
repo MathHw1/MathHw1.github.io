@@ -29,7 +29,127 @@ const MathHW = (function () {
         return { text, value: f.n / f.d, answer: showFrac(f), steps };
     }
 
+    const round = (n, places) => Math.round(n * 10 ** places) / 10 ** places;
+
+    // Algebra I and Geometry topics for 9th grade come first.
     const topics = {
+        slopeIntercept: {
+            name: 'Slope-Intercept Form', icon: 'm', blurb: 'y = mx + b, slope from two points.',
+            make(level) {
+                if (level === 'easy') {
+                    const m = nonZero(-5, 5), b = ri(-9, 9), x = ri(-5, 6), y = m * x + b;
+                    return exact(`y = ${m}x ${b < 0 ? '−' : '+'} ${Math.abs(b)}. Find y when x = ${num(x)}.`, y, [
+                        `Put ${num(x)} in for x: y = ${m} × ${par(x)} ${b < 0 ? '−' : '+'} ${Math.abs(b)}.`,
+                        `Multiply first: ${num(m * x)}.`,
+                        `Then add b: y = ${num(y)}.`
+                    ]);
+                }
+                const x1 = ri(-6, 4), rise = nonZero(-8, 8), run = pick([1, 2, 3, 4]), y1 = ri(-6, 6), x2 = x1 + run, y2 = y1 + rise, f = frac(rise, run);
+                if (level === 'medium') {
+                    return fractionAnswer(`Find the slope of the line through (${num(x1)}, ${num(y1)}) and (${num(x2)}, ${num(y2)}).`, f, [
+                        'Slope = (y₂ − y₁) ÷ (x₂ − x₁).',
+                        `Top: ${num(y2)} − ${par(y1)} = ${num(rise)}. Bottom: ${num(x2)} − ${par(x1)} = ${run}.`,
+                        `Slope = ${showFrac(f)}.`
+                    ]);
+                }
+                const m = nonZero(-4, 4), b = ri(-8, 8), x = ri(1, 5), y = m * x + b;
+                return exact(`A line has slope ${num(m)} and goes through (${x}, ${num(y)}). Find its y-intercept b.`, b, [
+                    `Start with y = mx + b and put in what you know: ${num(y)} = ${num(m)} × ${x} + b.`,
+                    `That gives ${num(y)} = ${num(m * x)} + b.`,
+                    `Subtract ${num(m * x)} from both sides: b = ${num(b)}.`
+                ]);
+            }
+        },
+        systems: {
+            name: 'Systems of Equations', icon: '{', blurb: 'Two equations, one point that works in both.',
+            make(level) {
+                const x = ri(-6, 6), y = ri(-6, 6);
+                if (level === 'easy') {
+                    const m = pick([2, 3, 4, -2, -3]), total = x + y;
+                    const c = y - m * x;
+                    return exact(`y = ${m}x ${c < 0 ? '−' : '+'} ${Math.abs(c)} and x + y = ${num(total)}. Find x.`, x, [
+                        `Substitute the first equation into the second: x + (${m}x ${c < 0 ? '−' : '+'} ${Math.abs(c)}) = ${num(total)}.`,
+                        `Combine like terms: ${1 + m}x ${c < 0 ? '−' : '+'} ${Math.abs(c)} = ${num(total)}.`,
+                        `Solve for x: x = ${num(x)}.`
+                    ]);
+                }
+                const a = level === 'medium' ? 1 : ri(2, 4), c = ri(1, 4), left = a * x + c * y, right = a * x - c * y;
+                return exact(`${a === 1 ? '' : a}x + ${c === 1 ? '' : c}y = ${num(left)} and ${a === 1 ? '' : a}x − ${c === 1 ? '' : c}y = ${num(right)}. Find x.`, x, [
+                    'Add the two equations so the y terms cancel.',
+                    `${2 * a}x = ${num(left + right)}.`,
+                    `Divide by ${2 * a}: x = ${num(x)}.`
+                ]);
+            }
+        },
+        quadraticFormula: {
+            name: 'Quadratic Formula', icon: '√', blurb: 'x = (−b ± √(b² − 4ac)) ÷ 2a.',
+            make(level) {
+                const a = level === 'easy' ? 1 : level === 'medium' ? pick([1, 2]) : pick([2, 3]);
+                const big = ri(1, 7), small = big - ri(1, 8), b = -a * (big + small), c = a * big * small, inside = b * b - 4 * a * c, root = Math.sqrt(inside);
+                const eq = `${a === 1 ? '' : a}x² ${b < 0 ? '−' : '+'} ${Math.abs(b)}x ${c < 0 ? '−' : '+'} ${Math.abs(c)} = 0`;
+                return exact(`${eq}. Find the larger solution.`, big, [
+                    `Here a = ${a}, b = ${num(b)} and c = ${num(c)}.`,
+                    `b² − 4ac = ${par(b)}² − 4(${a})${par(c).startsWith('(') ? par(c) : '(' + c + ')'} = ${inside}, and √${inside} = ${root}.`,
+                    `x = (${num(-b)} ± ${root}) ÷ ${2 * a}.`,
+                    `The larger answer uses the plus sign: x = ${num(big)}.`
+                ]);
+            }
+        },
+        distanceMidpoint: {
+            name: 'Distance and Midpoint', icon: '↔', blurb: 'The distance and middle of two points.',
+            make(level) {
+                const [run, rise] = pick([[3, 4], [6, 8], [5, 12], [8, 15], [9, 12]]), x1 = ri(-6, 6), y1 = ri(-6, 6), x2 = x1 + run, y2 = y1 + rise;
+                if (level === 'easy') {
+                    const ax = ri(-8, 8), bx = ax + 2 * ri(1, 6), ay = ri(-8, 8), by = ay + 2 * ri(-5, 5), mid = (ax + bx) / 2;
+                    return exact(`Find the x-coordinate of the midpoint of (${num(ax)}, ${num(ay)}) and (${num(bx)}, ${num(by)}).`, mid, [
+                        'Midpoint x = (x₁ + x₂) ÷ 2.',
+                        `(${num(ax)} + ${par(bx)}) ÷ 2 = ${num(ax + bx)} ÷ 2.`,
+                        `That’s ${num(mid)}.`
+                    ]);
+                }
+                return exact(`Find the distance between (${num(x1)}, ${num(y1)}) and (${num(x2)}, ${num(y2)}).`, Math.hypot(run, rise), [
+                    'Distance = √((x₂ − x₁)² + (y₂ − y₁)²).',
+                    `The differences are ${run} and ${rise}.`,
+                    `√(${run * run} + ${rise * rise}) = √${run * run + rise * rise} = ${Math.hypot(run, rise)}.`
+                ]);
+            }
+        },
+        pythagorean: {
+            name: 'Pythagorean Theorem', icon: '△', blurb: 'a² + b² = c² for right triangles.',
+            make(level) {
+                const scale = level === 'easy' ? 1 : ri(1, 4), [p, q, r] = pick([[3, 4, 5], [5, 12, 13], [8, 15, 17], [7, 24, 25]]).map(n => n * scale);
+                if (level !== 'hard') {
+                    return exact(`A right triangle has legs ${p} and ${q}. Find the hypotenuse.`, r, [
+                        'a² + b² = c².',
+                        `${p * p} + ${q * q} = ${r * r}.`,
+                        `c = √${r * r} = ${r}.`
+                    ]);
+                }
+                return exact(`A right triangle has hypotenuse ${r} and one leg ${p}. Find the other leg.`, q, [
+                    'Start with a² + b² = c², then subtract to get the missing leg.',
+                    `${r * r} − ${p * p} = ${q * q}.`,
+                    `The leg is √${q * q} = ${q}.`
+                ]);
+            }
+        },
+        density: {
+            name: 'Density', icon: 'D', blurb: 'D = m ÷ V.',
+            make(level) {
+                const d = level === 'easy' ? ri(2, 9) : round(ri(11, 95) / 10, 1), v = ri(2, 12), m = round(d * v, 1);
+                if (level === 'hard') {
+                    return exact(`An object has a density of ${d} g/cm³ and a mass of ${m} g. Find its volume in cm³.`, v, [
+                        'Rearrange D = m ÷ V to get V = m ÷ D.',
+                        `V = ${m} ÷ ${d}.`,
+                        `V = ${v} cm³.`
+                    ]);
+                }
+                return exact(`An object has a mass of ${m} g and a volume of ${v} cm³. Find its density in g/cm³.`, d, [
+                    'Density = mass ÷ volume.',
+                    `D = ${m} ÷ ${v}.`,
+                    `D = ${d} g/cm³.`
+                ]);
+            }
+        },
         fractions: {
             name: 'Fractions', icon: '½', blurb: 'Add, subtract, multiply and divide.',
             make(level) {
