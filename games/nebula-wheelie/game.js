@@ -26,6 +26,13 @@ const MAGNET_ANGLE = 6;            // each Cash Magnet level makes those heights
 const DOUBLE_CASH_METRES = 300;
 const NITRO_METRES = 200;
 
+const COUNTDOWN_SECONDS = 3;
+const GHOST_SEND_SECONDS = 0.1;
+const GHOST_SHIFT = 46;            // pixels the ghost sits behind you when you're level
+const GHOST_MOST_BEHIND = 40;      // how far the ghost can drift from that spot, so it stays on screen
+const GHOST_MOST_AHEAD = 30;       // and it never rides out in front of you, where it would hide the road
+const LEADERBOARD_GAME = 'wheelie';
+
 const VEHICLES = [
     { id: 'dirt', kind: 'bike', name: 'Dirt Bike', cost: 0, color: '#f97316', about: 'Your first ride.' },
     { id: 'street', kind: 'bike', name: 'Street Bike', cost: 400, color: '#2563eb', about: 'Faster, with 10% more points.', torque: 1.05, speed: 3, score: 1.1 },
@@ -126,9 +133,23 @@ const sound = {
 
 const input = { gas: false, brake: false };
 let state = null;        // the current ride
-let screen = 'menu';     // menu, riding, paused or over
+let screen = 'menu';     // menu, race, board, riding, paused or over
 
-function newRun() {
+// Gives the same numbers from the same seed, so both racers get the exact same road.
+function seededRandom(seed) {
+    let n = seed >>> 0;
+    return () => {
+        n = (n + 0x6D2B79F5) >>> 0;
+        let t = n;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+const newSeed = () => Math.floor(Math.random() * 4294967296);
+
+function newRun(seed) {
+    if (typeof seed !== 'number') { seed = newSeed(); race.leave(); }
     input.gas = input.brake = false;
     const rider = P.newRider(myVehicle(), save.upgrades);
     if (save.boosts.shield > 0) { save.boosts.shield--; rider.shields = 1; }
@@ -136,10 +157,14 @@ function newRun() {
     store();
     state = {
         rider, cash: 0, cleared: 0, things: [], nextCash: 60, nextObstacle: FIRST_OBSTACLE, nextPower: 180,
-        theme: 0, doneThisRun: [], shake: 0, cashDoubleUntil: 0
+        theme: 0, doneThisRun: [], shake: 0, cashDoubleUntil: 0,
+        countdown: race.on ? COUNTDOWN_SECONDS : 0, sendIn: 0,
+        // Each kind of thing gets its own numbers, so they stay matched between two players
+        // however much of the road each one has reached.
+        roll: { obstacle: seededRandom(seed), cash: seededRandom(seed + 1), power: seededRandom(seed + 2) }
     };
     show('riding');
-    say('Hold GAS! Don’t let the wheel touch down', 2400);
+    if (!race.on) say('Hold GAS! Don’t let the wheel touch down', 2400);
     sound.start();
 }
 
@@ -148,18 +173,18 @@ function spawn() {
     const s = state, ahead = s.rider.distance + LOOK_AHEAD;
     while (s.nextObstacle < ahead) {
         const types = s.nextObstacle < 250 ? ['barrier', 'beam'] : Object.keys(P.OBSTACLES);
-        s.things.push({ kind: 'obstacle', type: types[Math.floor(Math.random() * types.length)], x: s.nextObstacle });
-        s.nextObstacle += Math.max(30, 70 - s.nextObstacle / 40) + Math.random() * 26;
+        s.things.push({ kind: 'obstacle', type: types[Math.floor(s.roll.obstacle() * types.length)], x: s.nextObstacle });
+        s.nextObstacle += Math.max(30, 70 - s.nextObstacle / 40) + s.roll.obstacle() * 26;
     }
     while (s.nextCash < ahead) {
-        const high = Math.random() < 0.5, roll = Math.random();
+        const high = s.roll.cash() < 0.5, roll = s.roll.cash();
         s.things.push({ kind: 'cash', high, x: s.nextCash, value: roll < 0.08 ? 25 : roll < 0.4 ? 10 : 5 });
-        s.nextCash += 90 + Math.random() * 90;
+        s.nextCash += 90 + s.roll.cash() * 90;
     }
     while (s.nextPower < ahead) {
-        const type = ['shield', 'nitro', 'double'][Math.floor(Math.random() * 3)];
+        const type = ['shield', 'nitro', 'double'][Math.floor(s.roll.power() * 3)];
         s.things.push({ kind: 'power', type, x: s.nextPower });
-        s.nextPower += 240 + Math.random() * 220;
+        s.nextPower += 240 + s.roll.power() * 220;
     }
 }
 
@@ -239,6 +264,183 @@ function endRun() {
     $('overCash').textContent = '+' + money(s.cash);
     fillMissions($('overMissions'), s.doneThisRun);
     show('over');
+    saveScore(r.score);
+    race.finished(r);
+}
+
+// ---------- Leaderboard ----------
+
+function saveScore(score) {
+    const points = Math.floor(score);
+    const line = $('overRank');
+    $('overSaveName').classList.add('hidden');
+    line.textContent = '';
+    if (points < 1) return;
+    NebulaScores.addLocal(LEADERBOARD_GAME, points);
+    if (!NebulaScores.getName()) { $('overSaveName').classList.remove('hidden'); return; }
+    sendScore(points);
+}
+
+function sendScore(points) {
+    const line = $('overRank');
+    NebulaScores.send(LEADERBOARD_GAME, points)
+        .then(reply => { line.textContent = '🏆 You’re #' + reply.rank + ' on the leaderboard!'; })
+        .catch(() => { line.textContent = 'Saved here. The leaderboard couldn’t be reached right now.'; });
+}
+
+let boardTab = 'everyone';
+async function fillBoard() {
+    const list = $('boardList');
+    $('boardEveryone').classList.toggle('on', boardTab === 'everyone');
+    $('boardMine').classList.toggle('on', boardTab === 'mine');
+    $('boardName').textContent = NebulaScores.getName() || 'No name yet';
+    const draw = rows => {
+        list.textContent = '';
+        rows.forEach((row, i) => {
+            const item = document.createElement('li');
+            const name = document.createElement('span');
+            name.textContent = (i + 1) + '. ' + row.name;
+            const score = document.createElement('b');
+            score.textContent = row.score.toLocaleString();
+            item.append(name, score);
+            list.appendChild(item);
+        });
+        if (!rows.length) list.innerHTML = '<li class="empty">No scores yet. Go set one!</li>';
+    };
+    if (boardTab === 'mine') { draw(NebulaScores.local(LEADERBOARD_GAME)); return; }
+    list.innerHTML = '<li class="empty">Loading…</li>';
+    try {
+        const rows = await NebulaScores.everyone(LEADERBOARD_GAME);
+        if (boardTab === 'everyone') draw(rows);
+    } catch (_) {
+        if (boardTab === 'everyone') list.innerHTML = '<li class="empty">Couldn’t reach the leaderboard. The server may be waking up, so try again in a minute.</li>';
+    }
+}
+
+// ---------- Racing a friend ----------
+
+const race = {
+    lobby: null, on: false, seat: 0, friend: null, friendResult: null, myResult: null, wantMine: false, wantTheirs: false, gone: false,
+
+    connect() {
+        this.leave();
+        this.lobby = new NebulaLobby('wheelie', {
+            onWaiting: code => {
+                $('raceCode').textContent = code;
+                $('raceStart').classList.add('hidden');
+                $('raceWait').classList.remove('hidden');
+                raceMessage('');
+            },
+            onStart: seat => {
+                this.seat = seat;
+                this.on = true;
+                if (seat === 0) this.go();
+            },
+            onMessage: msg => this.receive(msg),
+            onStatus: text => {
+                if (screen === 'race') raceMessage(text);
+                else if (text) say(text, 2500);
+            },
+            onOpponentAway: () => say('📡 Your friend’s connection dropped', 2000),
+            onOpponentBack: () => say('Your friend is back!', 1500),
+            onOpponentLeft: () => {
+                this.friend = null;
+                this.gone = true;
+                if (this.on && !this.friendResult) this.friendResult = { left: true };
+                this.showResult();
+                say('Your friend left the race', 2200);
+            },
+            onError: text => {
+                if (screen === 'race') { raceMessage(text); raceReset(); }
+                else say(text, 3000);
+            }
+        });
+    },
+
+    // The host picks the road, so both players get the same one.
+    go() {
+        const seed = newSeed();
+        this.lobby.send({ t: 'go', seed });
+        this.begin(seed);
+    },
+
+    begin(seed) {
+        this.friend = null;
+        this.friendResult = this.myResult = null;
+        this.wantMine = this.wantTheirs = false;
+        newRun(seed);
+    },
+
+    receive(msg) {
+        if (!msg) return;
+        if (msg.t === 'go' && Number.isFinite(msg.seed)) this.begin(msg.seed);
+        else if (msg.t === 'pos' && Number.isFinite(msg.d) && Number.isFinite(msg.a)) {
+            const vehicle = VEHICLES.find(v => v.id === msg.v) || VEHICLES[0];
+            this.friend = { distance: msg.d, angle: Math.max(0, Math.min(120, msg.a)), vehicle };
+        }
+        else if (msg.t === 'done') {
+            this.friend = null;
+            this.friendResult = { score: Number(msg.score) || 0, distance: Number(msg.distance) || 0 };
+            this.showResult();
+            if (screen === 'riding') say('Your friend crashed! Beat ' + Math.floor(this.friendResult.score).toLocaleString(), 2000);
+        }
+        else if (msg.t === 'again') {
+            this.wantTheirs = true;
+            if (this.wantMine && this.seat === 0) this.go();
+            else if (screen === 'over') $('overRace').textContent = 'Your friend wants a rematch!';
+        }
+    },
+
+    sendPosition(r) {
+        this.lobby.sendLive({ t: 'pos', d: r.distance, a: r.angle, v: save.vehicle });
+    },
+
+    finished(r) {
+        if (!this.on) return;
+        this.myResult = { score: r.score, distance: r.distance };
+        this.lobby.send({ t: 'done', score: r.score, distance: r.distance });
+        this.showResult();
+    },
+
+    showResult() {
+        const line = $('overRace'), mine = this.myResult, theirs = this.friendResult;
+        if (screen !== 'over' || !mine) return;
+        if (!theirs) line.textContent = '🏁 Your friend is still riding…';
+        else if (theirs.left) line.textContent = '🏆 You win! Your friend left the race.';
+        else if (Math.floor(mine.score) === Math.floor(theirs.score)) line.textContent = '🤝 It’s a tie!';
+        else {
+            const friend = Math.floor(theirs.score).toLocaleString();
+            line.textContent = mine.score > theirs.score ? '🏆 You won the race! Your friend scored ' + friend + '.' : 'Your friend won the race with ' + friend + '.';
+        }
+        $('againBtn').textContent = this.gone ? 'Ride again' : 'Race again';
+    },
+
+    again() {
+        if (!this.lobby || this.gone) { newRun(); return; }
+        this.wantMine = true;
+        this.lobby.send({ t: 'again' });
+        if (this.wantTheirs && this.seat === 0) this.go();
+        else $('overRace').textContent = 'Waiting for your friend…';
+    },
+
+    leave() {
+        this.on = this.gone = false;
+        this.friend = this.friendResult = this.myResult = null;
+        this.wantMine = this.wantTheirs = false;
+        $('overRace').textContent = '';
+        $('againBtn').textContent = 'Ride again';
+        if (this.lobby) { const lobby = this.lobby; this.lobby = null; lobby.leave(); }
+    }
+};
+
+function raceMessage(text) {
+    $('raceMsg').textContent = text;
+    $('raceMsg').classList.toggle('hidden', !text);
+}
+
+function raceReset() {
+    $('raceStart').classList.remove('hidden');
+    $('raceWait').classList.add('hidden');
 }
 
 // ---------- Screens ----------
@@ -246,13 +448,14 @@ function endRun() {
 function show(name) {
     screen = name;
     const riding = name === 'riding';
-    for (const id of ['menu', 'garage', 'paused', 'over']) $(id).classList.toggle('hidden', name !== id);
+    for (const id of ['menu', 'garage', 'paused', 'over', 'race', 'board']) $(id).classList.toggle('hidden', name !== id);
     for (const id of ['hud', 'mission', 'gasBtn', 'brakeBtn', 'boostChips']) $(id).classList.toggle('hidden', !riding);
     if (!riding) { input.gas = input.brake = false; sound.silence(); }
     $('gasBtn').classList.remove('down');
     $('brakeBtn').classList.remove('down');
     if (name === 'menu') fillMenu();
     if (name === 'garage') fillGarage();
+    if (name === 'board') fillBoard();
     last = performance.now();
 }
 
@@ -563,9 +766,9 @@ function drawCar(color, spin, truck) {
     shape('#1c1f2b', 3, () => circle(30, -56 - lift, 11));             // the driver's helmet
 }
 
-function drawVehicle(r, distance, vehicle) {
+function drawVehicle(r, distance, vehicle, shift) {
     const spin = distance * 2.4;
-    const x = viewWidth * BIKE_X - 36, y = 413 + (vehicle.kind === 'truck' ? -11 : 0);
+    const x = viewWidth * BIKE_X - 36 + (shift || 0), y = 413 + (vehicle.kind === 'truck' ? -11 : 0);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(-(r.angle + (r.crashed ? 18 : 0)) * Math.PI / 180);
@@ -575,6 +778,18 @@ function drawVehicle(r, distance, vehicle) {
         drawRider(vehicle.color, 24, -56);
     }
     else drawCar(vehicle.color, spin, vehicle.kind === 'truck');
+    ctx.restore();
+}
+
+// Your friend, shaded and drawn behind you. Same road, but they can't touch you or block your view.
+function drawGhost(me) {
+    const friend = race.friend;
+    if (!friend) return;
+    const gap = (friend.distance - me.distance) * PIXELS_PER_METRE;
+    const shift = Math.max(-GHOST_MOST_BEHIND, Math.min(GHOST_MOST_AHEAD, gap)) - GHOST_SHIFT;
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    drawVehicle({ angle: friend.angle }, friend.distance, { ...friend.vehicle, color: '#94a3b8' }, shift);
     ctx.restore();
 }
 
@@ -619,6 +834,7 @@ function render() {
     }
     drawWorld(s.rider.distance, s.theme);
     drawThings(s);
+    drawGhost(s.rider);
     drawVehicle(s.rider, s.rider.distance, myVehicle());
     if (screen === 'riding') drawGauge(s.rider);
 }
@@ -637,6 +853,7 @@ function updateHud() {
     if (r.distance < r.nitroUntil) chips.push('🔥 ' + Math.ceil(r.nitroUntil - r.distance) + 'm');
     if (r.distance < s.cashDoubleUntil) chips.push('💵 ' + Math.ceil(s.cashDoubleUntil - r.distance) + 'm');
     if (r.distance < r.oilUntil) chips.push('🛢️ Oil!');
+    if (race.friend) chips.push('👻 Friend ' + Math.floor(race.friend.distance) + 'm');
     $('boostChips').textContent = chips.join('   ');
 }
 
@@ -650,7 +867,11 @@ function frame(now) {
     last = now;
     if (screen === 'riding') {
         const r = state.rider;
-        spare += passed;
+        if (state.countdown > 0) {
+            state.countdown -= passed;
+            say(state.countdown > 0 ? String(Math.ceil(state.countdown)) : 'GO!', 900);
+        }
+        else spare += passed;
         while (spare >= STEP) {
             P.step(r, input, STEP);
             spare -= STEP;
@@ -663,6 +884,10 @@ function frame(now) {
         if (theme !== state.theme) { state.theme = theme; say(THEMES[theme % THEMES.length].name, 1800); }
         sound.run(r.speed, input.gas);
         updateHud();
+        if (race.on && race.lobby) {
+            state.sendIn -= passed;
+            if (state.sendIn <= 0) { state.sendIn = GHOST_SEND_SECONDS; race.sendPosition(r); }
+        }
         if (r.crashed) endRun();
     }
     render();
@@ -707,13 +932,32 @@ addEventListener('resize', resize);
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('selectstart', e => e.preventDefault());
 
-$('playBtn').addEventListener('click', newRun);
-$('againBtn').addEventListener('click', newRun);
+$('playBtn').addEventListener('click', () => newRun());
+$('againBtn').addEventListener('click', () => { if (race.on) race.again(); else newRun(); });
+$('raceBtn').addEventListener('click', () => { raceReset(); raceMessage(''); show('race'); });
+$('raceBack').addEventListener('click', () => { race.leave(); show('menu'); });
+$('raceCreate').addEventListener('click', () => { race.connect(); race.lobby.create(); });
+$('raceCancel').addEventListener('click', () => { race.leave(); raceReset(); raceMessage(''); });
+$('raceJoin').addEventListener('click', () => {
+    showTouchKeyboard({ title: 'Type your friend’s lobby code', maxLength: 5, exactLength: 5, okLabel: 'Join', onDone: code => { race.connect(); race.lobby.join(code); } });
+});
+$('boardBtn').addEventListener('click', () => show('board'));
+$('boardBack').addEventListener('click', () => show('menu'));
+$('boardEveryone').addEventListener('click', () => { boardTab = 'everyone'; fillBoard(); });
+$('boardMine').addEventListener('click', () => { boardTab = 'mine'; fillBoard(); });
+$('boardRename').addEventListener('click', () => NebulaScores.askName(() => {
+    NebulaScores.hello(LEADERBOARD_GAME);
+    fillBoard();
+}));
+$('overSaveName').addEventListener('click', () => NebulaScores.askName(() => {
+    $('overSaveName').classList.add('hidden');
+    sendScore(NebulaScores.best(LEADERBOARD_GAME));
+}));
 $('garageBtn').addEventListener('click', () => show('garage'));
 $('overGarage').addEventListener('click', () => show('garage'));
 $('garageBack').addEventListener('click', () => show('menu'));
-$('overMenu').addEventListener('click', () => show('menu'));
-$('quitBtn').addEventListener('click', () => { save.cash += state.cash; store(); state = null; show('menu'); });
+$('overMenu').addEventListener('click', () => { race.leave(); show('menu'); });
+$('quitBtn').addEventListener('click', () => { save.cash += state.cash; store(); state = null; race.leave(); show('menu'); });
 $('resumeBtn').addEventListener('click', () => show('riding'));
 $('pauseBtn').addEventListener('click', pause);
 $('soundBtn').textContent = save.sound ? '🔊' : '🔇';
@@ -727,3 +971,5 @@ $('soundBtn').addEventListener('click', () => {
 resize();
 show('menu');
 requestAnimationFrame(frame);
+NebulaLobby.warmUp();
+NebulaScores.hello(LEADERBOARD_GAME);

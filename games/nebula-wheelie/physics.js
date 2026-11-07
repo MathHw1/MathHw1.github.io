@@ -5,7 +5,7 @@
 
 const WheeliePhysics = (function () {
     const TUNE = {
-        gasTorque: 205,        // how hard the gas lifts the front wheel
+        gasTorque: 240,        // how hard the gas lifts the front wheel
         brakeTorque: 270,      // how hard the brake pulls it down
         gravity: 165,          // how hard the bike falls forward at low angles
         damping: 1.5,
@@ -17,7 +17,7 @@ const WheeliePhysics = (function () {
         maxMultiplier: 5,
         minSpeed: 8,
         topSpeed: 24,
-        acceleration: 2.2,
+        acceleration: 2.42,
         drag: 1.1,
         armAngle: 20,          // once the wheel is this high, touching down ends the run
         stallTime: 5,          // seconds you get to lift the wheel at the start
