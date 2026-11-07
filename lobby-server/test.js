@@ -165,6 +165,24 @@ const tests = {
         assert.ok(back.ok && back.seat === 0);
         b.close(); c.close();
     },
+    async 'tracks who is ready and lets only the host clear it'() {
+        const a = await connect(), b = await connect();
+        const { room } = await join(a, { game: 'racing', create: true, playerId: 'player-a-14' });
+        await join(b, { game: 'racing', room, playerId: 'player-b-14' });
+        await sleep(50);
+        assert.deepStrictEqual(a.roster.seats.slice(0, 2).map(s => s.ready), [false, false]);
+        a.emit('set-ready', true);
+        b.emit('set-ready', true);
+        await sleep(50);
+        assert.deepStrictEqual(a.roster.seats.slice(0, 2).map(s => s.ready), [true, true]);
+        b.emit('clear-ready');
+        await sleep(50);
+        assert.strictEqual(a.roster.seats[1].ready, true);
+        a.emit('clear-ready');
+        await sleep(50);
+        assert.deepStrictEqual(b.roster.seats.slice(0, 2).map(s => s.ready), [false, false]);
+        a.close(); b.close();
+    },
     async 'stops rude names getting through disguises and leaves normal ones'() {
         const { isRude } = require('./name-filter');
         for (const rude of ['FUCK', 'F U C K', 'FUUUCK', 'SH1T', 'B1TCH', 'N1GGER', 'N1GG3R', 'NIGGA', 'NAGGOR', 'F@G', 'A55', 'H1TL3R']) assert.ok(isRude(rude), rude);

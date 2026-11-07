@@ -64,12 +64,12 @@ function cleanName(name) {
 }
 
 function newSeat(playerId, socket, request) {
-    return { playerId, deviceId: String(request.deviceId || ''), name: cleanName(request.name), socketId: socket.id, lastClientId: 0, droppedAt: 0, away: false };
+    return { playerId, deviceId: String(request.deviceId || ''), name: cleanName(request.name), socketId: socket.id, lastClientId: 0, droppedAt: 0, away: false, ready: false };
 }
 
 // Who's in the room, sent to everyone whenever it changes.
 function roster(room) {
-    return { host: room.host, seats: room.seats.map(seat => seat && { name: seat.name, away: seat.away || !!seat.droppedAt }) };
+    return { host: room.host, seats: room.seats.map(seat => seat && { name: seat.name, away: seat.away || !!seat.droppedAt, ready: seat.ready }) };
 }
 const sendRoster = room => io.to(room.code).emit('roster', roster(room));
 
@@ -341,6 +341,22 @@ io.on('connection', socket => {
         if (!room || socket.data.seat !== room.host || seatNum === room.host || !room.seats[seatNum]) { ack({ ok: false }); return; }
         kickSeat(room, seatNum);
         ack({ ok: true });
+    });
+
+    socket.on('set-ready', ready => {
+        const room = socket.data.room;
+        const seat = room && room.seats[socket.data.seat];
+        if (!seat) return;
+        seat.ready = !!ready;
+        sendRoster(room);
+    });
+
+    // The host starts a game, so everyone has to ready up again for the next one.
+    socket.on('clear-ready', () => {
+        const room = socket.data.room;
+        if (!room || socket.data.seat !== room.host) return;
+        room.seats.forEach(seat => { if (seat) seat.ready = false; });
+        sendRoster(room);
     });
 
     // Switching tabs or hiding the app. The seat stays, and the others wait.
