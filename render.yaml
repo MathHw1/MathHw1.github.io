@@ -10,3 +10,5 @@ services:
     envVars:
       - key: ALLOWED_ORIGINS
         value: https://mathhw1.github.io
+      - key: ADMIN_PASSWORD
+        sync: false

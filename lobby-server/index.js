@@ -1,13 +1,14 @@
 "use strict";
 
-// Nebula Arcade lobby server. Two players share a 5-letter room code, and everything one
-// sends is passed to the other. Hosts like Render handle HTTPS, so players connect
+// Nebula Arcade lobby server. Players share a 5-letter room code, and everything one
+// sends is passed to the others. Hosts like Render handle HTTPS, so players connect
 // to wss://…:443 while this app just listens on the PORT the host gives it.
 
 const http = require('http');
 const crypto = require('crypto');
 const express = require('express');
 const { Server } = require('socket.io');
+const { isRude } = require('./name-filter');
 
 const PORT = process.env.PORT || 3000;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://mathhw1.github.io').split(',').map(s => s.trim());
@@ -16,8 +17,9 @@ const TRANSPORTS = (process.env.TRANSPORTS || 'websocket,polling').split(',');
 
 const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0/O or 1/I/L, so codes are easy to read out
 const CODE_LENGTH = 5;
-const SEATS = 2;
-const GAMES = ['pool', 'chess', 'wheelie'];
+const ROOM_SIZES = { pool: 4, chess: 2, wheelie: 4, racing: 4 };
+const NAME_PATTERN = /^[A-Z0-9 ]{1,12}$/;
+const DEVICE_PATTERN = /^[a-zA-Z0-9-]{8,64}$/;
 const MAX_ROOMS = 5000;
 const MAX_MESSAGE_BYTES = 64 * 1024;
 const MAX_MESSAGES_PER_SECOND = 40;
@@ -26,17 +28,23 @@ const RECONNECT_GRACE_MS = Number(process.env.RECONNECT_GRACE_MS) || 120000;   /
 const WAITING_ROOM_MS = 30 * 60000;            // a lobby nobody joined closes after this
 const CLEANUP_MS = Math.min(5000, RECONNECT_GRACE_MS / 2);
 
-// The leaderboard lives in memory, and free hosts wipe that when they sleep. Each player's browser
-// keeps their own best and sends it again on every visit, so the board fills back up by itself.
-const SCORE_GAMES = ['wheelie'];
+// The leaderboards live in memory, and free hosts wipe that when they sleep. Each player's browser
+// keeps their own bests and sends them again on every visit, so the boards fill back up by themselves.
+// lower: true means the smallest value wins, as with fastest times.
+const BOARDS = {
+    'wheelie:score': {}, 'wheelie:level': {}, 'wheelie:miles': {}, 'wheelie:time': { lower: true },
+    'racing:time': { lower: true }, 'chess:elo': {}, 'pool:wins': {}
+};
 const BOARD_SIZE = 200;
 const SHOWN_SCORES = 20;
 const MAX_SCORE = 50000000;
-const MAX_SUBMITS_PER_MINUTE = 20;
-const scores = new Map(SCORE_GAMES.map(game => [game, []]));
+const MAX_SUBMITS_PER_MINUTE = 40;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';    // the admin tools stay off until this is set
+const scores = new Map(Object.keys(BOARDS).map(board => [board, []]));   // entries: { deviceId, name, score }
+const bannedDevices = new Set();
 const submits = new Map();         // address -> { count, resetAt }
 
-const rooms = new Map();   // code -> { code, game, seats: [seat, seat], log, nextSeq, createdAt }
+const rooms = new Map();   // code -> { code, game, host, seats: [seat, ...], kicked, log, nextSeq, createdAt }
 
 function newCode() {
     for (;;) {
@@ -46,9 +54,20 @@ function newCode() {
     }
 }
 
-function newSeat(playerId, socket) {
-    return { playerId, socketId: socket.id, lastClientId: 0, droppedAt: 0 };
+function cleanName(name) {
+    const clean = typeof name === 'string' ? name.trim() : '';
+    return NAME_PATTERN.test(clean) && !isRude(clean) ? clean : 'PLAYER';
 }
+
+function newSeat(playerId, socket, request) {
+    return { playerId, deviceId: String(request.deviceId || ''), name: cleanName(request.name), socketId: socket.id, lastClientId: 0, droppedAt: 0, away: false };
+}
+
+// Who's in the room, sent to everyone whenever it changes.
+function roster(room) {
+    return { host: room.host, seats: room.seats.map(seat => seat && { name: seat.name, away: seat.away || !!seat.droppedAt }) };
+}
+const sendRoster = room => io.to(room.code).emit('roster', roster(room));
 
 const playerCount = room => room.seats.filter(Boolean).length;
 
@@ -65,18 +84,20 @@ function takeSeat(socket, room, seatNum, lastSeq) {
     for (const entry of room.log) {
         if (entry.from !== seatNum && entry.seq > lastSeq) socket.emit('game-state-update', { seq: entry.seq, data: entry.data });
     }
-    return { ok: true, room: room.code, seat: seatNum, players: playerCount(room) };
+    return { ok: true, room: room.code, seat: seatNum, players: playerCount(room), roster: roster(room) };
 }
 
 function joinRoom(socket, request) {
     const { game, room: wanted, create, playerId } = request || {};
-    if (!GAMES.includes(game) || typeof playerId !== 'string' || playerId.length < 8 || playerId.length > 64) {
+    if (!ROOM_SIZES[game] || typeof playerId !== 'string' || playerId.length < 8 || playerId.length > 64) {
         return { ok: false, error: 'bad-request' };
     }
 
     if (create) {
         if (rooms.size >= MAX_ROOMS) return { ok: false, error: 'server-full' };
-        const room = { code: newCode(), game, seats: [newSeat(playerId, socket), null], log: [], nextSeq: 1, createdAt: Date.now() };
+        const seats = Array(ROOM_SIZES[game]).fill(null);
+        seats[0] = newSeat(playerId, socket, request);
+        const room = { code: newCode(), game, host: 0, seats, kicked: new Set(), log: [], nextSeq: 1, createdAt: Date.now() };
         rooms.set(room.code, room);
         return takeSeat(socket, room, 0, 0);
     }
@@ -84,6 +105,7 @@ function joinRoom(socket, request) {
     const code = String(wanted || '').toUpperCase();
     const room = rooms.get(code);
     if (!room || room.game !== game) return { ok: false, error: 'not-found' };
+    if (room.kicked.has(playerId) || (request.deviceId && room.kicked.has(request.deviceId))) return { ok: false, error: 'kicked' };
 
     // Coming back to a seat they already have?
     const mine = room.seats.findIndex(s => s && s.playerId === playerId);
@@ -93,16 +115,20 @@ function joinRoom(socket, request) {
         if (old && old.id !== socket.id) { old.data.room = null; old.disconnect(true); }
         seat.socketId = socket.id;
         seat.droppedAt = 0;
+        seat.away = false;
         const reply = takeSeat(socket, room, mine, Number(request.lastSeq) || 0);
         socket.to(room.code).emit('player-joined', { seat: mine, players: playerCount(room), rejoined: true });
+        sendRoster(room);
         return reply;
     }
 
     const free = room.seats.findIndex(s => !s);
     if (free === -1) return { ok: false, error: 'full' };
-    room.seats[free] = newSeat(playerId, socket);
-    const reply = takeSeat(socket, room, free, 0);
+    room.seats[free] = newSeat(playerId, socket, request);
+    // Anyone taking a new seat starts fresh, so skip the messages from before they came.
+    const reply = takeSeat(socket, room, free, room.nextSeq);
     socket.to(room.code).emit('player-joined', { seat: free, players: playerCount(room), rejoined: false });
+    sendRoster(room);
     return reply;
 }
 
@@ -116,7 +142,23 @@ function overRateLimit(socket) {
 function leaveSeat(room, seatNum) {
     room.seats[seatNum] = null;
     if (playerCount(room) === 0) { closeRoom(room); return; }
+    if (room.host === seatNum) room.host = room.seats.findIndex(Boolean);    // the next player takes over
     io.to(room.code).emit('player-left', { seat: seatNum, players: playerCount(room) });
+    sendRoster(room);
+}
+
+// The host removes a player. Their seat opens right up, and they can't come back to this room.
+function kickSeat(room, seatNum) {
+    const seat = room.seats[seatNum];
+    if (seat.deviceId) room.kicked.add(seat.deviceId);
+    room.kicked.add(seat.playerId);
+    const target = io.sockets.sockets.get(seat.socketId);
+    if (target) {
+        target.data.room = null;
+        target.leave(room.code);
+        target.emit('kicked');
+    }
+    leaveSeat(room, seatNum);
 }
 
 const app = express();
@@ -146,7 +188,13 @@ function tooManySubmits(req) {
     return ++entry.count > MAX_SUBMITS_PER_MINUTE;
 }
 
-const topScores = game => scores.get(game).slice(0, SHOWN_SCORES);
+const topScores = board => scores.get(board).slice(0, SHOWN_SCORES).map(({ name, score }) => ({ name, score }));
+
+function sortBoard(board) {
+    const lower = BOARDS[board].lower, list = scores.get(board);
+    list.sort((a, b) => lower ? a.score - b.score : b.score - a.score);
+    list.length = Math.min(list.length, BOARD_SIZE);
+}
 
 app.options('/scores', (req, res) => {
     if (!allowSite(req, res)) return res.sendStatus(403);
@@ -155,26 +203,85 @@ app.options('/scores', (req, res) => {
     res.sendStatus(204);
 });
 
-app.get('/scores/:game', (req, res) => {
+app.get('/scores/:game/:category', (req, res) => {
     allowSite(req, res);
-    if (!scores.has(req.params.game)) return res.sendStatus(404);
-    res.json({ scores: topScores(req.params.game) });
+    const board = req.params.game + ':' + req.params.category;
+    if (!scores.has(board)) return res.sendStatus(404);
+    res.json({ scores: topScores(board) });
 });
 
 app.post('/scores', express.json({ limit: '1kb' }), (req, res) => {
     if (!allowSite(req, res)) return res.sendStatus(403);
     if (tooManySubmits(req)) return res.sendStatus(429);
-    const { game, name, score } = req.body || {};
-    if (!scores.has(game) || typeof name !== 'string' || !/^[A-Z0-9 ]{1,12}$/.test(name) || !name.trim() ||
+    const { board, name, score, deviceId } = req.body || {};
+    if (!scores.has(board) || typeof name !== 'string' || !NAME_PATTERN.test(name) || !name.trim() ||
+        typeof deviceId !== 'string' || !DEVICE_PATTERN.test(deviceId) ||
         !Number.isInteger(score) || score < 1 || score > MAX_SCORE) return res.sendStatus(400);
+    if (bannedDevices.has(deviceId)) return res.sendStatus(403);
+    const clean = name.trim();
+    if (isRude(clean)) return res.sendStatus(422);
 
-    // One line per name, keeping that name's best score.
-    const board = scores.get(game), clean = name.trim(), mine = board.find(entry => entry.name === clean);
-    if (!mine) board.push({ name: clean, score });
-    else if (score > mine.score) mine.score = score;
-    board.sort((a, b) => b.score - a.score);
-    board.length = Math.min(board.length, BOARD_SIZE);
-    res.json({ scores: topScores(game), rank: board.findIndex(entry => entry.name === clean) + 1 });
+    // One line per device, keeping its best. The newest name replaces the old one.
+    const list = scores.get(board), lower = BOARDS[board].lower, mine = list.find(entry => entry.deviceId === deviceId);
+    if (!mine) list.push({ deviceId, name: clean, score });
+    else {
+        mine.name = clean;
+        if (lower ? score < mine.score : score > mine.score) mine.score = score;
+    }
+    sortBoard(board);
+    res.json({ scores: topScores(board), rank: list.findIndex(entry => entry.deviceId === deviceId) + 1 });
+});
+
+// ---------- Owner tools ----------
+
+function isOwner(req) {
+    if (!ADMIN_PASSWORD) return false;
+    const given = crypto.createHash('sha256').update(String(req.headers['x-admin-password'] || '')).digest();
+    return crypto.timingSafeEqual(given, crypto.createHash('sha256').update(ADMIN_PASSWORD).digest());
+}
+
+app.options('/admin/:action', (req, res) => {
+    if (!allowSite(req, res)) return res.sendStatus(403);
+    res.set('Access-Control-Allow-Methods', 'GET, POST');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Password');
+    res.sendStatus(204);
+});
+
+const adminView = () => ({
+    boards: Object.fromEntries([...scores].map(([board, list]) => [board, list])),
+    banned: [...bannedDevices]
+});
+
+app.get('/admin/view', (req, res) => {
+    if (!allowSite(req, res)) return res.sendStatus(403);
+    if (tooManySubmits(req)) return res.sendStatus(429);
+    if (!isOwner(req)) return res.sendStatus(401);
+    res.json(adminView());
+});
+
+app.post('/admin/:action', express.json({ limit: '1kb' }), (req, res) => {
+    if (!allowSite(req, res)) return res.sendStatus(403);
+    if (tooManySubmits(req)) return res.sendStatus(429);
+    if (!isOwner(req)) return res.sendStatus(401);
+    const { deviceId, board, name } = req.body || {};
+    if (typeof deviceId !== 'string' || !DEVICE_PATTERN.test(deviceId)) return res.sendStatus(400);
+    const wipe = list => { for (let i = list.length - 1; i >= 0; i--) if (list[i].deviceId === deviceId) list.splice(i, 1); };
+
+    if (req.params.action === 'rename') {
+        if (typeof name !== 'string' || !NAME_PATTERN.test(name) || !name.trim()) return res.sendStatus(400);
+        for (const list of scores.values()) for (const entry of list) if (entry.deviceId === deviceId) entry.name = name.trim();
+    }
+    else if (req.params.action === 'wipe') {
+        if (!scores.has(board)) return res.sendStatus(400);
+        wipe(scores.get(board));
+    }
+    else if (req.params.action === 'ban') {
+        bannedDevices.add(deviceId);
+        for (const list of scores.values()) wipe(list);
+    }
+    else if (req.params.action === 'unban') bannedDevices.delete(deviceId);
+    else return res.sendStatus(404);
+    res.json(adminView());
 });
 
 const server = http.createServer(app);
@@ -219,6 +326,26 @@ io.on('connection', socket => {
         ack({ ok: true });
     });
 
+    // Only the host can do this, and not to themselves.
+    socket.on('kick-player', (seatNum, reply) => {
+        const ack = typeof reply === 'function' ? reply : () => {};
+        const room = socket.data.room;
+        if (!room || socket.data.seat !== room.host || seatNum === room.host || !room.seats[seatNum]) { ack({ ok: false }); return; }
+        kickSeat(room, seatNum);
+        ack({ ok: true });
+    });
+
+    // Switching tabs or hiding the app. The seat stays, and the others wait.
+    socket.on('player-status', away => {
+        const room = socket.data.room;
+        const seat = room && room.seats[socket.data.seat];
+        if (!seat || seat.away === !!away) return;
+        seat.away = !!away;
+        seat.awayAt = Date.now();
+        socket.to(room.code).emit(away ? 'player-away' : 'player-joined', { seat: socket.data.seat, players: playerCount(room), rejoined: true });
+        sendRoster(room);
+    });
+
     socket.on('leave-room', () => {
         const room = socket.data.room;
         if (!room) return;
@@ -235,6 +362,7 @@ io.on('connection', socket => {
         if (!seat || seat.socketId !== socket.id) return;
         seat.droppedAt = Date.now();
         socket.to(room.code).emit('player-away', { seat: socket.data.seat });
+        sendRoster(room);
     });
 });
 
@@ -243,6 +371,11 @@ setInterval(() => {
     for (const room of rooms.values()) {
         room.seats.forEach((seat, seatNum) => {
             if (seat && seat.droppedAt && now - seat.droppedAt > RECONNECT_GRACE_MS) leaveSeat(room, seatNum);
+            // Nobody should be stuck waiting forever for a hidden tab, so the game carries on after this.
+            else if (seat && seat.away && now - seat.awayAt > RECONNECT_GRACE_MS) {
+                seat.away = false;
+                sendRoster(room);
+            }
         });
         if (rooms.has(room.code) && playerCount(room) === 1 && room.log.length === 0 && now - room.createdAt > WAITING_ROOM_MS) closeRoom(room);
     }
