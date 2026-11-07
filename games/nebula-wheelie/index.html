@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Nebula Wheelie | Nebula Arcade</title>
+  <style>
+    :root { --panel:rgba(15,18,30,.92); --line:rgba(255,255,255,.14); --text:#f1f5f9; --muted:#a3b1c6; --accent:#f97316; --green:#22c55e; }
+    * { box-sizing:border-box; }
+    /* No text selection or long-press menu anywhere, so a held thumb can't turn the screen blue on an iPad */
+    html, body { margin:0; height:100%; overflow:hidden; background:#0b0d14; color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+                 -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; touch-action:none; overscroll-behavior:none; }
+    canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
+    button { font:inherit; font-weight:700; color:var(--text); background:rgba(255,255,255,.1); border:1px solid var(--line); border-radius:12px; padding:10px 14px; cursor:pointer; touch-action:manipulation; }
+    button:hover { background:rgba(255,255,255,.18); }
+    button:disabled { opacity:.45; cursor:default; }
+    button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .hidden { display:none !important; }
+
+    #hud { position:fixed; top:max(8px,env(safe-area-inset-top)); left:10px; right:10px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; pointer-events:none; }
+    #stats { display:flex; flex-wrap:wrap; gap:6px; }
+    .stat { background:rgba(0,0,0,.55); border-radius:10px; padding:4px 10px; min-width:64px; }
+    .stat small { display:block; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+    .stat b { font-size:19px; }
+    #multStat.hot b { color:#facc15; }
+    #hudButtons { display:flex; gap:6px; pointer-events:auto; }
+    #hudButtons button { padding:8px 11px; background:rgba(0,0,0,.55); }
+    #lockBtn.on { background:var(--green); border-color:var(--green); color:#04210f; }
+    #mission { position:fixed; top:calc(max(8px,env(safe-area-inset-top)) + 58px); left:10px; padding:4px 10px; border-radius:8px; background:rgba(0,0,0,.45); font-size:13px; color:var(--muted); pointer-events:none; }
+    #message { position:fixed; top:27%; left:0; right:0; text-align:center; font-size:clamp(24px,5vw,42px); font-weight:900; text-shadow:0 3px 0 rgba(0,0,0,.45); pointer-events:none; opacity:0; transition:opacity .25s; }
+    #message.show { opacity:1; }
+
+    .pedal { position:fixed; bottom:max(14px,env(safe-area-inset-bottom)); width:clamp(120px,21vw,190px); height:clamp(96px,20vh,150px); border-radius:20px;
+             font-size:clamp(20px,3vw,27px); touch-action:none; background:rgba(0,0,0,.42); border:2px solid rgba(255,255,255,.3); }
+    .pedal small { display:block; font-size:12px; font-weight:600; color:var(--muted); }
+    .pedal.down { background:rgba(255,255,255,.3); }
+    #gasBtn { right:max(14px,env(safe-area-inset-right)); border-color:var(--green); }
+    #brakeBtn { left:max(14px,env(safe-area-inset-left)); border-color:#ef4444; }
+
+    .screen { position:fixed; inset:0; display:grid; place-items:center; padding:14px; background:rgba(5,7,14,.62); overflow:auto; touch-action:pan-y; }
+    .box { width:min(480px,100%); padding:20px; background:var(--panel); border:1px solid var(--line); border-radius:18px; }
+    .box h1 { margin:0; font-size:clamp(30px,7vw,42px); font-style:italic; letter-spacing:-.02em; }
+    .box h2 { margin:0 0 6px; font-size:26px; }
+    .box p { margin:6px 0; color:var(--muted); line-height:1.45; }
+    .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+    .row button { flex:1 1 120px; padding:13px; }
+    .numbers { display:flex; gap:8px; margin:12px 0 0; }
+    .numbers div { flex:1; padding:8px; text-align:center; border-radius:10px; background:rgba(255,255,255,.07); font-size:12px; color:var(--muted); }
+    .numbers b { display:block; font-size:21px; color:var(--text); }
+    .missions { margin:10px 0 0; padding:0; list-style:none; font-size:14px; }
+    .missions li { padding:5px 0; color:var(--muted); }
+    .missions li.done { color:var(--green); }
+    .shop-item { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-top:1px solid var(--line); }
+    .shop-item b { display:block; } .shop-item small { color:var(--muted); }
+    .shop-item button { flex:none; min-width:96px; }
+    .swatch { display:inline-block; width:14px; height:14px; margin-right:7px; border-radius:50%; vertical-align:-2px; }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="stats">
+    <div class="stat"><small>Score</small><b id="hudScore">0</b></div>
+    <div class="stat" id="multStat"><small>Multiplier</small><b id="hudMult">×1</b></div>
+    <div class="stat"><small>Distance</small><b id="hudDist">0m</b></div>
+    <div class="stat"><small>Coins</small><b id="hudCoins">0</b></div>
+  </div>
+  <div id="hudButtons">
+    <button id="lockBtn" title="Lock (L)">🔒 Lock</button>
+    <button id="soundBtn" title="Sound" aria-label="Sound">🔊</button>
+    <button id="pauseBtn" title="Pause (P)" aria-label="Pause">⏸</button>
+  </div>
+</div>
+<div id="mission" class="hidden"></div>
+<div id="message"></div>
+<button id="brakeBtn" class="pedal hidden">BRAKE<small>← or S</small></button>
+<button id="gasBtn" class="pedal hidden">GAS<small>→ or W</small></button>
+
+<div id="menu" class="screen">
+  <div class="box">
+    <h1>Nebula Wheelie</h1>
+    <p>Hold the gas to lift your front wheel. Stay in the green zone to build your score, and don’t flip over.</p>
+    <div class="numbers">
+      <div><b id="menuBest">0</b>Best score</div>
+      <div><b id="menuCoins">0</b>Coins</div>
+    </div>
+    <ul id="menuMissions" class="missions"></ul>
+    <div class="row">
+      <button id="playBtn" class="primary">Ride</button>
+      <button id="cruiseBtn">🔒 Just cruise</button>
+      <button id="garageBtn">Garage</button>
+    </div>
+  </div>
+</div>
+
+<div id="garage" class="screen hidden">
+  <div class="box">
+    <h2>Garage</h2>
+    <p>You have <b id="garageCoins">0</b> coins.</p>
+    <div id="shop"></div>
+    <div class="row"><button id="garageBack" class="primary">Back</button></div>
+  </div>
+</div>
+
+<div id="paused" class="screen hidden">
+  <div class="box">
+    <h2>Paused</h2>
+    <div class="row">
+      <button id="resumeBtn" class="primary">Keep riding</button>
+      <button id="quitBtn">Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="over" class="screen hidden">
+  <div class="box">
+    <h2 id="overTitle"></h2>
+    <p id="overText"></p>
+    <div class="numbers">
+      <div><b id="overScore">0</b>Score</div>
+      <div><b id="overDist">0m</b>Distance</div>
+      <div><b id="overCoins">0</b>Coins</div>
+    </div>
+    <ul id="overMissions" class="missions"></ul>
+    <div class="row">
+      <button id="againBtn" class="primary">Ride again</button>
+      <button id="overGarage">Garage</button>
+      <button id="overMenu">Menu</button>
+    </div>
+  </div>
+</div>
+
+<script src="physics.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
