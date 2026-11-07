@@ -154,6 +154,17 @@ const tests = {
         assert.ok(a.last.rejoined && !a.roster.seats[1].away);
         a.close(); b.close();
     },
+    async 'lets a new tab back into a dropped seat but not one still in use'() {
+        const a = await connect(), b = await connect(), c = await connect();
+        const { room } = await join(a, { game: 'wheelie', create: true, playerId: 'player-a-13' });
+        await join(b, { game: 'wheelie', room, playerId: 'player-b-13' });
+        assert.strictEqual((await join(c, { game: 'wheelie', room, playerId: 'player-a-13', onlyIfDropped: true })).error, 'seat-in-use');
+        a.close();
+        await sleep(100);
+        const back = await join(c, { game: 'wheelie', room, playerId: 'player-a-13', onlyIfDropped: true });
+        assert.ok(back.ok && back.seat === 0);
+        b.close(); c.close();
+    },
     async 'stops rude names getting through disguises and leaves normal ones'() {
         const { isRude } = require('./name-filter');
         for (const rude of ['FUCK', 'F U C K', 'FUUUCK', 'SH1T', 'B1TCH', 'N1GGER', 'N1GG3R', 'NIGGA', 'NAGGOR', 'F@G', 'A55', 'H1TL3R']) assert.ok(isRude(rude), rude);

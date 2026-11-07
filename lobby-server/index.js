@@ -5,6 +5,7 @@
 // to wss://…:443 while this app just listens on the PORT the host gives it.
 
 const http = require('http');
+const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const { Server } = require('socket.io');
@@ -24,9 +25,12 @@ const MAX_ROOMS = 5000;
 const MAX_MESSAGE_BYTES = 64 * 1024;
 const MAX_MESSAGES_PER_SECOND = 40;
 const LOG_LENGTH = 1000;                       // messages kept per room, for players catching up
-const RECONNECT_GRACE_MS = Number(process.env.RECONNECT_GRACE_MS) || 120000;   // how long a dropped player keeps their seat
+// How long a dropped player keeps their seat. Races are short, so nobody should wait long for one.
+const GRACE_MS = { pool: 120000, chess: 120000, wheelie: 40000, racing: 40000 };
+const TEST_GRACE_MS = Number(process.env.RECONNECT_GRACE_MS) || 0;
+const graceFor = room => TEST_GRACE_MS || GRACE_MS[room.game];
 const WAITING_ROOM_MS = 30 * 60000;            // a lobby nobody joined closes after this
-const CLEANUP_MS = Math.min(5000, RECONNECT_GRACE_MS / 2);
+const CLEANUP_MS = TEST_GRACE_MS ? Math.min(5000, TEST_GRACE_MS / 2) : 5000;
 
 // The leaderboards live in memory, and free hosts wipe that when they sleep. Each player's browser
 // keeps their own bests and sends them again on every visit, so the boards fill back up by themselves.
@@ -112,6 +116,8 @@ function joinRoom(socket, request) {
     if (mine !== -1) {
         const seat = room.seats[mine];
         const old = io.sockets.sockets.get(seat.socketId);
+        // A second tab mustn't take the seat from a tab that's still playing.
+        if (request.onlyIfDropped && !seat.droppedAt && old && old.id !== socket.id) return { ok: false, error: 'seat-in-use' };
         if (old && old.id !== socket.id) { old.data.room = null; old.disconnect(true); }
         seat.socketId = socket.id;
         seat.droppedAt = 0;
@@ -164,6 +170,8 @@ function kickSeat(room, seatNum) {
 const app = express();
 app.disable('x-powered-by');
 app.get('/', (req, res) => res.type('text').send('Nebula Arcade lobby server is running.'));
+// For testing on real devices over Wi-Fi: SERVE_GAMES=1 hands out the games from this same address.
+if (process.env.SERVE_GAMES) app.use(express.static(path.join(__dirname, '..', 'games')));
 app.get('/health', (req, res) => {
     res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(req.headers.origin) ? req.headers.origin : ALLOWED_ORIGINS[0]);
     res.json({ ok: true });
@@ -370,9 +378,9 @@ setInterval(() => {
     const now = Date.now();
     for (const room of rooms.values()) {
         room.seats.forEach((seat, seatNum) => {
-            if (seat && seat.droppedAt && now - seat.droppedAt > RECONNECT_GRACE_MS) leaveSeat(room, seatNum);
+            if (seat && seat.droppedAt && now - seat.droppedAt > graceFor(room)) leaveSeat(room, seatNum);
             // Nobody should be stuck waiting forever for a hidden tab, so the game carries on after this.
-            else if (seat && seat.away && now - seat.awayAt > RECONNECT_GRACE_MS) {
+            else if (seat && seat.away && now - seat.awayAt > graceFor(room)) {
                 seat.away = false;
                 sendRoster(room);
             }
