@@ -149,6 +149,29 @@ function makeSheet() {
     }
 }
 
+// ---------- Dev Mode ----------
+// A simple gate for the arcade page, which checks DEV_ACCESS_KEY when it opens. GitHub Pages can't
+// keep real secrets, so this is only there to stop people wandering in, not to protect anything.
+
+const DEV_PASSWORD_HASH = '9514bda5f1da3a11c1ec2b4d40252bcc327a89cc4cc0f01f673048a551333d08';
+const DEV_ACCESS_KEY = 'mathhw-dev-access';
+
+async function sha256(text) {
+    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function devMode() {
+    const password = window.prompt('Enter the password');
+    if (password === null) return;
+    if (await sha256(password.trim()) !== DEV_PASSWORD_HASH) {
+        window.alert('That password isn’t right.');
+        return;
+    }
+    try { localStorage.setItem(DEV_ACCESS_KEY, 'yes'); } catch (_) {}
+    window.location.href = 'arcade.html';
+}
+
 // ---------- Start ----------
 
 fillTopics();
@@ -168,3 +191,4 @@ $('practiceLevel').addEventListener('change', newProblem);
 ['sheetTopic', 'sheetLevel', 'sheetCount', 'sheetKey'].forEach(id => $(id).addEventListener('change', makeSheet));
 $('newSheet').addEventListener('click', makeSheet);
 $('printSheet').addEventListener('click', () => window.print());
+$('devMode').addEventListener('click', devMode);
