@@ -227,7 +227,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
       <div id="olCode"></div>
       <ul id="olRoster"></ul>
       <p id="olHint"></p>
-      <div class="row"><button class="btn primary sm" id="olGo" hidden>Start the race</button></div>
+      <div class="row"><button class="btn primary sm" id="olReady">Ready</button><button class="btn primary sm" id="olGo" hidden>Start the race</button></div>
     </div>
     <p id="olMsg"></p>
     <div class="row"><button class="btn sm" id="olBack">Back</button></div>
@@ -561,8 +561,9 @@ const online={
     lobby.roster.seats.forEach((seat,n)=>{if(!seat){this.dropGhost(n);this.racers=this.racers.filter(r=>r!==n);}});
     NebulaLobby.fillRoster($('olRoster'),lobby);
     const count=lobby.roster.seats.filter(Boolean).length;
-    $('olGo').hidden=!lobby.isHost;$('olGo').disabled=count<2;
-    $('olHint').textContent=lobby.isHost?(count<2?'Waiting for at least one friend…':'Press Start when everyone’s in.'):'The host will start the race.';
+    $('olGo').hidden=!lobby.isHost;$('olGo').disabled=count<2||!lobby.allReady;
+    $('olReady').textContent=lobby.isReady?'Not ready':'Ready';
+    $('olHint').textContent=lobby.readyHint(count);
     if(state==='results')this.showResults();
   },
   nameOf(n){const p=this.lobby&&this.lobby.roster&&this.lobby.roster.seats[n];return p?p.name:'Friend';},
@@ -574,7 +575,7 @@ const online={
   go(){
     const lobby=this.lobby;if(!lobby||!lobby.isHost)return;
     const racers=lobby.roster.seats.flatMap((seat,n)=>seat?[n]:[]);if(racers.length<2)return;
-    lobby.send({t:'go',racers});this.begin(racers);
+    lobby.send({t:'go',racers});lobby.clearReady();this.begin(racers);
   },
   begin(racers,data){
     const seen=[...this.results];
@@ -633,7 +634,8 @@ $('bFriends').onclick=()=>{online.resetPanel();$('olMsg').textContent='';show('o
 $('olBack').onclick=()=>{online.leave();show('menu');};
 $('olCreate').onclick=()=>{online.connect();online.lobby.create();};
 $('olJoin').onclick=()=>showTouchKeyboard({title:'Type your friend’s lobby code',maxLength:5,exactLength:5,okLabel:'Join',onDone:code=>{online.connect();online.lobby.join(code);}});
-$('olGo').onclick=()=>online.go();
+$('olGo').onclick=()=>{if(online.lobby.allReady)online.go();};
+$('olReady').onclick=()=>online.lobby.setReady(!online.lobby.isReady);
 
 /* ---------------- racers ---------------- */
 const AIS=[{name:'Blaze',paint:'#e8473a',body:'muscle',spoiler:'duck',decal:'stripes',skill:1.0},{name:'Viper',paint:'#2fbf71',body:'racer',spoiler:'wing',decal:'number',skill:.98},{name:'Comet',paint:'#4b7bff',body:'compact',spoiler:'none',decal:'checker',skill:.96},{name:'Bolt',paint:'#ff9a1f',body:'racer',spoiler:'duck',decal:'stripes',skill:1.01},{name:'Shadow',paint:'#8a5cf6',body:'muscle',spoiler:'wing',decal:'number',skill:.97}];

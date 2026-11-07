@@ -229,7 +229,7 @@ class NebulaLobby {
         lobby.roster.seats.forEach((seat, n) => {
             if (!seat) return;
             const item = document.createElement('li'), name = document.createElement('span');
-            name.textContent = (n === lobby.roster.host ? '👑 ' : '') + seat.name + (n === lobby.seat ? ' (you)' : '') + (seat.away ? ' · away' : '');
+            name.textContent = (seat.ready ? '✓ ' : '') + (n === lobby.roster.host ? '👑 ' : '') + seat.name + (n === lobby.seat ? ' (you)' : '') + (seat.away ? ' · away' : '');
             item.appendChild(name);
             if (lobby.isHost && n !== lobby.seat) {
                 const kick = document.createElement('button');
@@ -239,6 +239,25 @@ class NebulaLobby {
             }
             list.appendChild(item);
         });
+    }
+
+    get isReady() { return !!this.roster && !!this.roster.seats[this.seat] && this.roster.seats[this.seat].ready; }
+
+    get allReady() { return !!this.roster && this.roster.seats.filter(Boolean).every(seat => seat.ready); }
+
+    setReady(ready) {
+        if (this.connected) this.socket.emit('set-ready', ready);
+    }
+
+    clearReady() {
+        if (this.connected) this.socket.emit('clear-ready');
+    }
+
+    // The line under the player list, for rooms that use the Ready button.
+    readyHint(count) {
+        if (count < 2) return 'Waiting for at least one friend…';
+        if (!this.allReady) return this.isHost ? 'Start unlocks when everyone’s ready.' : 'Press Ready. The host starts when everyone’s ready.';
+        return this.isHost ? 'Everyone’s ready. Press Start!' : 'Everyone’s ready. Waiting for the host to start.';
     }
 
     get isHost() { return !!this.roster && this.roster.host === this.seat; }

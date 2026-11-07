@@ -106,6 +106,7 @@ Online_Singleton.prototype.rosterChanged = function () {
 // Only the host can do this. It tells everyone which seats are playing.
 Online_Singleton.prototype.startMatch = function () {
     this.send({ t: 'start' });
+    this.lobby.clearReady();
     this.beginMatch();
 };
 
@@ -342,10 +343,13 @@ Online_Singleton.prototype.initUI = function () {
                 '<button data-a="cancel" style="background:#dc2626">Leave online game</button></div>';
         } else if (online.lobby && online.code) {
             var host = online.lobby.isHost, count = online.lobby.roster ? online.lobby.roster.seats.filter(Boolean).length : 1;
+            var canStart = count >= 2 && online.lobby.allReady;
             html += '<p>Send this code to up to 3 friends. With 3 or 4 players you play in teams.</p>' +
                 '<div class="code">' + online.code + '</div>' + players +
-                '<p>' + (host ? (count < 2 ? 'Waiting for at least one friend…' : 'Press Start when everyone’s in.') : 'The host will start the game.') + '</p>' +
-                '<div class="row">' + (host && count >= 2 ? '<button data-a="start">Start</button>' : '') + '<button class="ghost" data-a="cancel">Leave</button></div>';
+                '<p>' + online.lobby.readyHint(count) + '</p>' +
+                '<div class="row"><button data-a="ready">' + (online.lobby.isReady ? 'Not ready' : 'Ready') + '</button>' +
+                (host ? '<button data-a="start"' + (canStart ? '' : ' disabled style="opacity:.45"') + '>Start</button>' : '') +
+                '<button class="ghost" data-a="cancel">Leave</button></div>';
         } else {
             var stats = NebulaProfile.stats('pool', { wins: 0, losses: 0 });
             html += '<p>Play pool with up to 3 friends on other devices.</p>' +
@@ -365,7 +369,8 @@ Online_Singleton.prototype.initUI = function () {
                 var a = b.dataset.a;
                 if (a === 'create') online.createLobby();
                 else if (a === 'join') showTouchKeyboard({ title: 'Type your friend’s lobby code', maxLength: 5, exactLength: 5, okLabel: 'Join', onDone: function (code) { online.joinLobby(code); } });
-                else if (a === 'start') online.startMatch();
+                else if (a === 'start') { if (online.lobby.allReady) online.startMatch(); }
+                else if (a === 'ready') online.lobby.setReady(!online.lobby.isReady);
                 else if (a === 'cancel') { online.leave(); online.setStatus(''); }
                 else if (a === 'close') { open = false; online.render(); }
             });

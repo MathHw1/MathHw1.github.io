@@ -460,8 +460,10 @@ const race = {
         NebulaLobby.fillRoster($('overRoster'), lobby);
         const count = lobby.roster.seats.filter(Boolean).length;
         $('raceGo').classList.toggle('hidden', !lobby.isHost);
-        $('raceGo').disabled = count < 2;
-        $('raceHint').textContent = lobby.isHost ? (count < 2 ? 'Waiting for at least one friend…' : 'Press Start when everyone’s in.') : 'The host will start the race.';
+        $('raceGo').disabled = count < 2 || !lobby.allReady;
+        $('raceReady').textContent = lobby.isReady ? 'Not ready' : 'Ready';
+        $('raceReady').classList.toggle('primary', !lobby.isReady);
+        $('raceHint').textContent = lobby.readyHint(count);
         if (this.on) this.showResult();
     },
 
@@ -483,6 +485,7 @@ const race = {
         const seed = newSeed(), racers = lobby.roster.seats.flatMap((seat, n) => seat ? [n] : []);
         if (racers.length < 2) return;
         lobby.send({ t: 'go', seed, racers });
+        lobby.clearReady();
         this.begin(seed, racers);
     },
 
@@ -1276,7 +1279,8 @@ document.addEventListener('selectstart', e => e.preventDefault());
 
 $('playBtn').addEventListener('click', () => newRun());
 $('againBtn').addEventListener('click', () => { if (race.on) race.go(); else newRun(); });
-$('raceGo').addEventListener('click', () => race.go());
+$('raceGo').addEventListener('click', () => { if (race.lobby.allReady) race.go(); });
+$('raceReady').addEventListener('click', () => race.lobby.setReady(!race.lobby.isReady));
 $('raceBtn').addEventListener('click', () => { raceReset(); raceMessage(''); show('race'); });
 $('raceBack').addEventListener('click', () => { race.leave(); show('menu'); });
 $('raceCreate').addEventListener('click', () => { race.connect(); race.lobby.create(); });
