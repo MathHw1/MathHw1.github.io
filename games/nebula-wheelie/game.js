@@ -175,7 +175,7 @@ function newRun(seed) {
     state = {
         rider, cash: 0, cleared: 0, things: [], nextCash: 60, nextObstacle: FIRST_OBSTACLE, nextPower: 180,
         theme: 0, doneThisRun: [], shake: 0, cashDoubleUntil: 0,
-        countdown: race.on ? COUNTDOWN_SECONDS : 0, sendIn: 0,
+        countdown: race.on ? COUNTDOWN_SECONDS : 0, sendIn: 0, seed,
         // Each kind of thing gets its own numbers, so they stay matched between two players
         // however much of the road each one has reached.
         roll: { obstacle: seededRandom(seed), cash: seededRandom(seed + 1), power: seededRandom(seed + 2) },
@@ -369,7 +369,7 @@ function showRank(reply) {
 // ---------- Racing friends ----------
 
 const race = {
-    lobby: null, on: false, racers: [], friends: new Map(), results: new Map(), resultsShown: false,
+    lobby: null, on: false, racers: [], friends: new Map(), results: new Map(), resultsShown: false, saved: null,
 
     connect() {
         this.leave();
@@ -385,6 +385,8 @@ const race = {
             onOpponentAway: () => {},
             onOpponentBack: () => {},
             onOpponentLeft: () => {},
+            onResumed: () => this.resumed(),
+            onResumeRefused: () => { this.leave(); raceReset(); show('menu'); },
             onKicked: () => {
                 this.leave();
                 raceReset();
@@ -395,7 +397,52 @@ const race = {
                 if (screen === 'race') { raceMessage(text); raceReset(); }
                 else say(text, 3000);
             }
-        }, { manualStart: true });
+        }, { manualStart: true, resumable: true });
+    },
+
+    // What's needed to put this rider back on the road after a reload.
+    snapshot() {
+        const s = state;
+        if (!this.on || !s || s.wreck) return null;
+        return { seed: s.seed, racers: this.racers, results: [...this.results], rider: s.rider, cash: s.cash, cleared: s.cleared, level: s.level, theme: s.theme, mileMs: s.mileMs, cashDoubleUntil: s.cashDoubleUntil };
+    },
+
+    // Runs when the page opens, in case a reload or closed tab left a race behind.
+    tryResume() {
+        const saved = NebulaLobby.savedSession('wheelie');
+        if (!saved) return;
+        this.connect();
+        this.saved = saved.data;
+        show('race');
+        this.showLobby(saved.code);
+        this.lobby.resume(saved);
+    },
+
+    resumed() {
+        const data = this.saved;
+        this.saved = null;
+        this.rosterChanged();
+        if (this.on) return;                    // a new race started while we were gone
+        if (data) this.restoreRun(data);
+        else { this.showLobby(this.lobby.code); show('race'); }
+    },
+
+    restoreRun(data) {
+        const seen = [...this.results];
+        this.lobby.started = true;
+        this.on = true;
+        this.racers = data.racers.filter(n => this.lobby.roster.seats[n]);
+        this.results = new Map([...data.results, ...seen]);
+        newRun(data.seed);
+        const s = state;
+        Object.assign(s.rider, data.rider);
+        Object.assign(s, { cash: data.cash, cleared: data.cleared, level: data.level, theme: data.theme, mileMs: data.mileMs, cashDoubleUntil: data.cashDoubleUntil, resuming: true });
+        // The road comes from the seed, so laying it out again gives the same one.
+        spawn();
+        const front = s.rider.distance + FRONT_REACH;
+        s.things = s.things.filter(t => t.x > front);
+        this.lobby.setAway(true);               // the others wait for our countdown
+        updateHud();
     },
 
     showLobby(code) {
@@ -1130,6 +1177,10 @@ function frame(now) {
         if (state.countdown > 0) {
             state.countdown -= passed;
             say(state.countdown > 0 ? String(Math.ceil(state.countdown)) : 'GO!', 900);
+            if (state.countdown <= 0 && state.resuming) {
+                state.resuming = false;
+                if (race.lobby) race.lobby.setAway(false);
+            }
         }
         else spare += passed;
         while (spare >= STEP) {
@@ -1258,6 +1309,10 @@ $('soundBtn').addEventListener('click', () => {
 resize();
 show('menu');
 requestAnimationFrame(frame);
+race.tryResume();
+const saveRace = () => { if (race.lobby) race.lobby.remember(race.snapshot()); };
+setInterval(saveRace, 1000);
+addEventListener('pagehide', saveRace);
 NebulaLobby.warmUp();
 NebulaScores.hello(LEADERBOARD_GAME);
 // A wiped device gets its bikes and cash back from the backup.

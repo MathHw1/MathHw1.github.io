@@ -14,7 +14,7 @@ const NebulaProfile = (function () {
     function fresh() {
         let name = '';
         try { name = localStorage.getItem(OLD_NAME_KEY) || ''; } catch (_) {}
-        return { deviceId: crypto.randomUUID(), name, stats: {} };
+        return { deviceId: newPlayerId(), name, stats: {} };
     }
 
     const hadSave = !!load();

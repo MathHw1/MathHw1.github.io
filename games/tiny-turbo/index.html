@@ -191,6 +191,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
   <div class="menu-col">
     <h1 class="logo">Tiny<span>Turbo</span></h1>
     <p class="tag">Three laps. Five rivals. Grab coins, hit the nitro, and spend your winnings in the garage.</p>
+    <p class="tag">Credit to Aqeel</p>
     <div class="stack">
       <button class="btn primary" id="bRace">Race</button>
       <button class="btn" id="bFriends">Race Friends</button>
@@ -513,7 +514,7 @@ function ghostMesh(cfg){
   scene.add(mesh);return mesh;
 }
 const online={
-  lobby:null,on:false,racers:[],ghosts:new Map(),results:new Map(),sendIn:0,
+  lobby:null,on:false,racers:[],ghosts:new Map(),results:new Map(),sendIn:0,saved:null,restored:null,
   connect(){
     this.leave();
     this.lobby=new NebulaLobby('racing',{
@@ -522,9 +523,37 @@ const online={
       onRoster:()=>this.rosterChanged(),
       onMessage:msg=>this.receive(msg),
       onStatus:text=>{$('olMsg').textContent=text;},
+      onResumed:()=>this.resumed(),
+      onResumeRefused:()=>{this.leave();this.resetPanel();show('menu');},
       onKicked:()=>{this.leave();toMenu();show('online');this.resetPanel();$('olMsg').textContent='The host removed you from the lobby.';},
       onError:text=>{this.resetPanel();$('olMsg').textContent=text;}
-    },{manualStart:true});
+    },{manualStart:true,resumable:true});
+  },
+  // What's needed to put this car back on the track after a reload.
+  snapshot(){
+    if(this.restored)return this.restored;   // still counting down after a rejoin
+    if(!this.on||!player||player.finished||(state!=='race'&&state!=='paused'))return null;
+    const c=player;
+    return{racers:this.racers,results:[...this.results],t:raceT,x:c.pos.x,z:c.pos.z,h:c.h,speed:c.speed,idx:c.idx,laps:c.laps,cp:c.cp,prog:c.prog,nitro:c.nitro,lapStart:c.lapStart,bestLap:c.bestLap,coins:coinsPicked};
+  },
+  tryResume(){
+    const saved=NebulaLobby.savedSession('racing');if(!saved)return;
+    this.connect();this.saved=saved.data;this.showPanel(saved.code);this.lobby.resume(saved);
+  },
+  showPanel(code){$('olCode').textContent=code;$('olStart').hidden=true;$('olWait').hidden=false;show('online');},
+  resumed(){
+    const data=this.saved;this.saved=null;this.rosterChanged();
+    if(this.on)return; // a new race started while we were gone
+    if(data)this.begin(data.racers.filter(n=>this.lobby.roster.seats[n]),data);else this.showPanel(this.lobby.code);
+  },
+  // The car waits on the grid spot it left until the countdown ends.
+  restoreCar(d){
+    const c=player;c.pos.set(d.x,0,d.z);c.h=d.h;c.idx=d.idx;c.laps=d.laps;c.cp=d.cp;c.prog=d.prog;c.nitro=d.nitro;c.bestLap=d.bestLap;
+    syncMesh(c);snapCam();coinsPicked=d.coins;this.restored=d;this.lobby.setAway(true);
+  },
+  countdownDone(){
+    const d=this.restored;if(!d)return;
+    this.restored=null;raceT=d.t;player.lapStart=d.lapStart;player.speed=d.speed;this.lobby.setAway(false);
   },
   resetPanel(){$('olStart').hidden=false;$('olWait').hidden=true;},
   rosterChanged(){
@@ -547,9 +576,10 @@ const online={
     const racers=lobby.roster.seats.flatMap((seat,n)=>seat?[n]:[]);if(racers.length<2)return;
     lobby.send({t:'go',racers});this.begin(racers);
   },
-  begin(racers){
-    this.lobby.started=true;this.on=true;this.racers=racers;this.results.clear();this.dropGhosts();$('rPlayers').textContent='';
-    show(null);startRace();
+  begin(racers,data){
+    const seen=[...this.results];
+    this.lobby.started=true;this.on=true;this.racers=racers;this.results=new Map(data?[...data.results,...seen]:[]);this.dropGhosts();$('rPlayers').textContent='';
+    show(null);startRace();if(data)this.restoreCar(data);
   },
   receive(msg){
     if(!msg)return;
@@ -892,7 +922,7 @@ function loop(now){
   if(state==='countdown'){
     cdT-=dt;const n=Math.ceil(cdT-.6);
     if(n!==cdShown){cdShown=n;if(n>0){$('countdown').textContent=n;beep(440,.18,'square',.15);}else{$('countdown').textContent='GO!';beep(880,.4,'square',.18);}}
-    if(cdT<=.6&&state==='countdown'&&!online.hold()){state='race';raceT=0;for(const c of cars)c.lapStart=0;setTimeout(()=>{if(state!=='countdown')$('countdown').hidden=true;},700);}
+    if(cdT<=.6&&state==='countdown'&&!online.hold()){state='race';raceT=0;for(const c of cars)c.lapStart=0;online.countdownDone();setTimeout(()=>{if(state!=='countdown')$('countdown').hidden=true;},700);}
   }
   const held=online.tick(dt);
   if((state==='race'||state==='countdown'||state==='finishing'||state==='results')&&!held)update(dt);
@@ -909,6 +939,9 @@ function loop(now){
 }
 refreshMenu();setupGrid();camera.fov=60;camera.updateProjectionMatrix();
 requestAnimationFrame(loop);
+online.tryResume();
+const saveRace=()=>{if(online.lobby)online.lobby.remember(online.snapshot());};
+setInterval(saveRace,1000);addEventListener('pagehide',saveRace);
 })();
 </script>
 

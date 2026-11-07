@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex">
   <title>Owner Panel</title>
+  <script>
+    // Reachable from the arcade's bottom row, so anyone who hasn't unlocked the arcade goes to the homepage.
+    try { if (localStorage.getItem('mathhw-dev-access') !== 'yes') location.replace('./'); } catch (_) {}
+  </script>
   <style>
     :root { --bg:#0b0d14; --panel:#151925; --line:rgba(255,255,255,.1); --text:#e2e8f0; --muted:#94a3b8; }
     * { box-sizing:border-box; }
@@ -24,6 +28,7 @@
 </head>
 <body>
 <main>
+  <a href="arcade.html" style="color:#c4b5fd">← Back to the arcade</a>
   <h1>Owner Panel</h1>
   <p id="message"></p>
   <section id="login">

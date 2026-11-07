@@ -16,16 +16,19 @@
 //       onError(text)         couldn't create or join, or the game is lost
 //   });
 //   lobby.create();  lobby.join('ABCDE');  lobby.send({...});  lobby.kick(seat);  lobby.leave();
-//   Pass { manualStart: true } as a third option for rooms where the host presses Start.
+//   Pass { manualStart: true } as a third option for rooms where the host presses Start, and
+//   resumable: true to get a seat back after a reload. See savedSession() and resume().
 
 // The address of the deployed lobby server. Testing on this computer uses a local one.
-const LOBBY_SERVER_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
-    ? 'http://localhost:3000'
+const LOBBY_SERVER_URL = /^(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname)
+    ? 'http://' + location.hostname + ':3000'
     : 'https://nebula-lobby-server.onrender.com';
 
 const SLOW_START_NOTICE_MS = 4000;    // free hosts sleep when idle, so the first connection can be slow
 const CONNECT_TIMEOUT_MS = 75000;
 const ATTEMPT_TIMEOUT_MS = 8000;      // how long one connection attempt can take before trying again
+const SESSION_KEY = 'nebula-lobby:';
+const SESSION_MS = 150000;            // a saved seat older than this is gone from the server anyway
 const LOBBY_ERRORS = {
     'not-found': code => 'No lobby with code ' + code + '. Check the code and try again.',
     'full': () => 'That lobby is already full.',
@@ -33,11 +36,18 @@ const LOBBY_ERRORS = {
     'server-full': () => 'The lobby server is full right now. Try again soon.'
 };
 
+// crypto.randomUUID only exists on https, and testing over Wi-Fi uses plain http.
+function newPlayerId() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+}
+
 class NebulaLobby {
     constructor(game, handlers, options) {
         this.game = game;
         this.on = handlers;
         this.manualStart = !!(options && options.manualStart);
+        this.resumable = !!(options && options.resumable);
         this.socket = null;
         this.roster = null;
         this.reset();
@@ -55,6 +65,7 @@ class NebulaLobby {
         this.unconfirmed = [];    // sent, but the server hasn't confirmed them yet
         this.started = false;
         this.joined = false;
+        this.resuming = false;
         clearTimeout(this.slowTimer);
         clearTimeout(this.giveUpTimer);
     }
@@ -64,7 +75,38 @@ class NebulaLobby {
     // Wakes a sleeping server early, so Create and Join feel quicker. Failure doesn't matter here.
     static warmUp() { fetch(LOBBY_SERVER_URL + '/health').catch(() => {}); }
 
+    // The seat this browser left behind, if it's recent enough to go back to. This tab's own copy
+    // comes first, so a reload gets its own seat even with the same game open in another tab.
+    static savedSession(game) {
+        for (const store of [sessionStorage, localStorage]) {
+            try {
+                const saved = JSON.parse(store.getItem(SESSION_KEY + game));
+                if (saved && Date.now() - saved.savedAt < SESSION_MS) return { ...saved, otherTab: store === localStorage };
+            } catch (_) {}
+        }
+        return null;
+    }
+
+    // Saves the seat, plus anything the game needs to pick up where it left off.
+    remember(data) {
+        if (!this.resumable || !this.code) return;
+        if (data !== undefined) this.data = data;
+        const saved = JSON.stringify({ code: this.code, seat: this.seat, playerId: this.playerId, lastSeq: this.lastSeq, nextId: this.nextId, data: this.data, savedAt: Date.now() });
+        for (const store of [sessionStorage, localStorage]) {
+            try { store.setItem(SESSION_KEY + this.game, saved); } catch (_) {}
+        }
+    }
+
+    forget() {
+        if (!this.resumable) return;
+        for (const store of [sessionStorage, localStorage]) {
+            try { store.removeItem(SESSION_KEY + this.game); } catch (_) {}
+        }
+    }
+
     create() { this.open({ create: true }); }
+
+    resume(session) { this.open({ resume: session }); }
 
     join(rawCode) {
         const code = String(rawCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -76,8 +118,12 @@ class NebulaLobby {
         if (typeof io === 'undefined') { this.on.onError('Online play couldn’t load. Check your internet and refresh.'); return; }
         this.leave();
         this.target = target;
-        this.playerId = crypto.randomUUID();
-        this.on.onStatus(target.create ? 'Creating lobby…' : 'Joining lobby ' + target.room + '…');
+        this.playerId = newPlayerId();
+        if (target.resume) {
+            ({ code: this.code, seat: this.seat, playerId: this.playerId, lastSeq: this.lastSeq, nextId: this.nextId } = target.resume);
+            this.resuming = true;
+        }
+        this.on.onStatus(target.resume ? 'Getting your seat back…' : target.create ? 'Creating lobby…' : 'Joining lobby ' + target.room + '…');
 
         this.slowTimer = setTimeout(() => this.on.onStatus('Waking up the game server. This can take up to a minute…'), SLOW_START_NOTICE_MS);
         this.giveUpTimer = setTimeout(() => {
@@ -116,6 +162,7 @@ class NebulaLobby {
             if (update.seq) {
                 if (update.seq <= this.lastSeq) return;
                 this.lastSeq = update.seq;
+                this.remember();
             }
             this.on.onMessage(update.data);
         });
@@ -127,6 +174,7 @@ class NebulaLobby {
         const request = returning
             ? { game: this.game, room: this.code, playerId: this.playerId, lastSeq: this.lastSeq }
             : { game: this.game, playerId: this.playerId, ...this.target };
+        if (this.resuming && this.target.resume.otherTab) request.onlyIfDropped = true;
         if (typeof NebulaProfile !== 'undefined') {
             request.name = NebulaProfile.name();
             request.deviceId = NebulaProfile.deviceId();
@@ -136,9 +184,15 @@ class NebulaLobby {
             clearTimeout(this.slowTimer);
             clearTimeout(this.giveUpTimer);
 
+            if (reply.error === 'seat-in-use') {
+                this.resumable = false;       // that seat is another tab's, so leave its saved copy alone
+                this.leave();
+                this.on.onResumeRefused();
+                return;
+            }
             if (!reply.ok) {
                 const message = returning
-                    ? 'The game ended while you were disconnected.'
+                    ? (this.resuming ? 'That race has ended.' : 'The game ended while you were disconnected.')
                     : (LOBBY_ERRORS[reply.error] || (() => 'Couldn’t join that lobby. Try again.'))(this.target.room);
                 this.leave();
                 this.on.onError(message);
@@ -151,7 +205,13 @@ class NebulaLobby {
             this.setRoster(reply.roster);
             this.unconfirmed.forEach(update => this.emitUpdate(update));
 
-            if (returning) this.on.onStatus('');
+            this.remember();
+            if (this.resuming) {
+                this.resuming = false;
+                this.on.onStatus('');
+                this.on.onResumed();
+            }
+            else if (returning) this.on.onStatus('');
             else if (reply.players >= 2 && !this.manualStart) { this.on.onStatus(''); this.begin(); }
             else { this.on.onStatus(''); this.on.onWaiting(this.code); }
         });
@@ -183,6 +243,11 @@ class NebulaLobby {
 
     get isHost() { return !!this.roster && this.roster.host === this.seat; }
 
+    // Tells the others to wait, or that they can stop waiting.
+    setAway(away) {
+        if (this.connected) this.socket.emit('player-status', away);
+    }
+
     kick(seat) {
         if (this.connected) this.socket.emit('kick-player', seat);
     }
@@ -201,6 +266,7 @@ class NebulaLobby {
     // Moves and results. These are confirmed, and resent after a reconnect if needed.
     send(data) {
         const update = { id: this.nextId++, data };
+        this.remember();
         this.unconfirmed.push(update);
         if (this.connected) this.emitUpdate(update);
     }
@@ -217,6 +283,7 @@ class NebulaLobby {
     }
 
     leave() {
+        this.forget();
         const socket = this.socket;
         this.socket = null;
         this.reset();

@@ -162,6 +162,8 @@
         <span aria-hidden="true">·</span>
         <a href="support.html" class="text-violet-300 hover:text-violet-200 underline underline-offset-2">🛟 Support</a>
         <span aria-hidden="true">·</span>
+        <a href="admin.html" class="text-violet-300 hover:text-violet-200 underline underline-offset-2">🔒 Owner</a>
+        <span aria-hidden="true">·</span>
         <span title="People with the arcade open right now"><span class="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1.5 align-middle"></span><b id="onlineCount" class="text-slate-300">…</b> online</span>
         <span aria-hidden="true">·</span>
         <span title="Total visits">👁️ <b id="visitCount" class="text-slate-300">…</b> visits</span>
@@ -254,6 +256,7 @@ const GAMES = [
     genre: 'Racing',   
     source: 'original', 
     desc: 'Race three laps, grab coins and take on up to 3 friends online.', 
+    credit: 'Credit to Aqeel', 
     img: 'games/tiny-turbo/cover.svg', 
     url: 'games/tiny-turbo/index.html' 
   },
@@ -444,6 +447,7 @@ function renderGrid() {
       <div class="p-4">
         <h3 class="font-bold">${g.title}</h3>
         <p class="text-xs text-slate-500 mt-0.5 line-clamp-2">${g.desc}</p>
+        ${g.credit ? `<p class="text-xs text-violet-300 mt-0.5">${g.credit}</p>` : ''}
       </div>
     </article>`).join('');
 }
