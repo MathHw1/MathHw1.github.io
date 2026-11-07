@@ -70,28 +70,6 @@
 
   <!-- Main -->
   <main class="flex-1 p-4 sm:p-6 lg:p-10 pb-24">
-    <!-- Bugs & fixes: add the newest entry at the top of the list -->
-    <details open class="mb-8 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 sm:px-5 py-3">
-      <summary class="cursor-pointer select-none font-semibold text-violet-200">🛠️ Bugs &amp; fixes</summary>
-      <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
-        <li><b>New games:</b> Space Waves, Bowmasters and Paper.io 2.</li>
-        <li><b>New game: Wheelie Life!</b> Our own wheelie game, made for iPads too. Keep your front wheel up, dodge obstacles, and earn cash for new bikes, cars and upgrades.</li>
-        <li><b>Cleaner games:</b> games now open as just the game inside the arcade, and they can't open popups or send you to another site. Close and 📝 always stay on screen.</li>
-        <li><b>New homepage:</b> MathHW now has free worksheets and practice problems. The arcade has its own page, under Math Games.</li>
-        <li><b>Online lobbies:</b> Pool and Chess now connect through a game server, so they work on more networks. If your connection drops, you reconnect and pick up where you left off.</li>
-        <li><b>New game: Chess!</b> Play a bot (Easy, Medium, Hard or Extreme) or a friend with a lobby code. Pick your own time, and it shows you where each piece can go.</li>
-        <li><b>iPad:</b> games now fill the whole screen, stray taps don't close them, and the page behind stays still while you play.</li>
-        <li><b>New games:</b> Tunnel Rush, Om Nom, Front Wars, Drift Boss, World Guesser, Basketball Stars, and Basketball, Soccer, Boxing and Volley Random.</li>
-        <li><b>New:</b> the bottom of the page shows how many people are on the arcade right now and how many visits it has had.</li>
-        <li><b>Classic Pool:</b> pick how good the computer is: Easy, Medium, Hard or Extreme. The cue now sits on the side you click, and online lobbies no longer get stuck.</li>
-        <li><b>PolyTrack:</b> plays right in the arcade again, with the keyboard working straight away.</li>
-        <li><b>Slope 1:</b> now really loads Slope 1 (it was loading Slope 2 by mistake).</li>
-        <li><b>Notes:</b> added Computer Science Java. Pick a subject at the top, then tap 📝 (or press Esc). Your notes save on their own.</li>
-        <li><b>Classic Pool:</b> Play Online with a friend using a lobby code, a live scoreboard, and fixed physics.</li>
-      </ul>
-      <p class="mt-3 text-xs text-slate-400">Every bug fixed so far is listed at the bottom of the page.</p>
-    </details>
-
     <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
       <div>
         <h1 id="sectionTitle" class="text-2xl sm:text-3xl font-extrabold tracking-tight">All Games</h1>
@@ -120,6 +98,29 @@
 
     <!-- Footer: credit and the full list of bugs fixed (add new ones at the top of the list) -->
     <footer class="mt-16 pt-8 border-t border-white/10 text-sm text-slate-400">
+    <!-- Bugs & fixes: add the newest entry at the top of the list -->
+    <details class="mb-3 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 sm:px-5 py-3">
+      <summary class="cursor-pointer select-none font-semibold text-violet-200">🛠️ Bugs &amp; fixes</summary>
+      <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
+        <li><b>New games:</b> Google Feud, Getaway Shootout and Aqua Park IO.</li>
+        <li><b>Notes:</b> new notes for Physics, Biology, Geometry, Chemistry and History.</li>
+        <li><b>Games:</b> everything now stays in the arcade, and Close always brings you back here.</li>
+        <li><b>New games:</b> Space Waves, Bowmasters and Paper.io 2.</li>
+        <li><b>New game: Wheelie Life!</b> Our own wheelie game, made for iPads too. Keep your front wheel up, dodge obstacles, and earn cash for new bikes, cars and upgrades.</li>
+        <li><b>Cleaner games:</b> games now open as just the game inside the arcade, and they can't open popups or send you to another site. Close and 📝 always stay on screen.</li>
+        <li><b>New homepage:</b> MathHW now has free worksheets and practice problems. The arcade has its own page, under Math Games.</li>
+        <li><b>Online lobbies:</b> Pool and Chess now connect through a game server, so they work on more networks. If your connection drops, you reconnect and pick up where you left off.</li>
+        <li><b>New game: Chess!</b> Play a bot (Easy, Medium, Hard or Extreme) or a friend with a lobby code. Pick your own time, and it shows you where each piece can go.</li>
+        <li><b>iPad:</b> games now fill the whole screen, stray taps don't close them, and the page behind stays still while you play.</li>
+        <li><b>New games:</b> Tunnel Rush, Om Nom, Front Wars, Drift Boss, World Guesser, Basketball Stars, and Basketball, Soccer, Boxing and Volley Random.</li>
+        <li><b>New:</b> the bottom of the page shows how many people are on the arcade right now and how many visits it has had.</li>
+        <li><b>Classic Pool:</b> pick how good the computer is: Easy, Medium, Hard or Extreme. The cue now sits on the side you click, and online lobbies no longer get stuck.</li>
+        <li><b>PolyTrack:</b> plays right in the arcade again, with the keyboard working straight away.</li>
+        <li><b>Slope 1:</b> now really loads Slope 1 (it was loading Slope 2 by mistake).</li>
+        <li><b>Notes:</b> added Computer Science Java. Pick a subject at the top, then tap 📝 (or press Esc). Your notes save on their own.</li>
+        <li><b>Classic Pool:</b> Play Online with a friend using a lobby code, a live scoreboard, and fixed physics.</li>
+      </ul>
+    </details>
       <details class="mb-6">
         <summary class="cursor-pointer select-none font-semibold text-slate-200">📋 Changelog: bugs fixed</summary>
         <ul class="mt-3 space-y-2 list-disc pl-5 leading-relaxed">
@@ -168,7 +169,6 @@
     <div id="playerBar" class="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-b border-white/5 shrink-0">
       <p id="playerTitle" class="font-semibold truncate"></p>
       <div class="flex gap-2 shrink-0">
-        <button id="tabBtn" class="hidden px-3 py-2 text-sm rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold transition" title="Open in new tab">🚀 <span class="hidden sm:inline">Open in New Tab</span></button>
         <button id="panicBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 transition" title="Notes">📝</button>
         <button id="fsBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 transition">⛶ <span class="hidden sm:inline">Fullscreen</span></button>
         <button id="closeBtn" class="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-rose-500/80 transition">✕ <span class="hidden sm:inline">Close</span></button>
@@ -260,6 +260,30 @@ const GAMES = [
     desc: 'Aim your shot and win the archery duel.', 
     img: 'games/bowmasters/cover.jpg', 
     embed: 'https://www.madkidgames.com/full/bowmasters-archery-shooting' 
+  },
+  { 
+    title: 'Google Feud',   
+    genre: 'Puzzle',   
+    source: 'embed', 
+    desc: 'Guess what people search for the most.', 
+    img: 'games/google-feud/cover.jpg', 
+    embed: 'https://games.googlesolitaire.me/google-feud-game/index.html' 
+  },
+  { 
+    title: 'Getaway Shootout',   
+    genre: 'Action',   
+    source: 'embed', 
+    desc: 'Race and shoot your way to the getaway van.', 
+    img: 'games/getaway-shootout/cover.jpg', 
+    embed: 'https://play-prod.struckd.com/api/v1/games/game/f5c4d162-bae9-48ee-8238-1b7f039503ed/build/latest/frame' 
+  },
+  { 
+    title: 'Aqua Park IO',   
+    genre: 'Racing',   
+    source: 'embed', 
+    desc: 'Slide down the water park and beat everyone to the bottom.', 
+    img: 'games/aqua-park-io/cover.jpg', 
+    embed: 'https://1playergames.io/aquaparkio.embed' 
   },
   { 
     title: 'Slope 1',           
@@ -446,7 +470,6 @@ $('grid').addEventListener('click', async e => {
   current = g;
 
   const targetUrl = g.url || g.embed;
-  $('tabBtn').classList.toggle('hidden', !isValidUrl(targetUrl));
   $('playerTitle').textContent = g.title;
   $('player').classList.remove('hidden');
   lockPage(true);
@@ -457,6 +480,8 @@ $('grid').addEventListener('click', async e => {
   const frame = $('frame');
   const fileExists = await checkGameStatus(targetUrl);
 
+  frameLoads = 0;
+  leftGame = false;
   if (targetUrl && fileExists) {
     frame.removeAttribute('srcdoc');
     // Games from other sites run in a sandbox: they can't open new tabs or popups, or send
@@ -477,21 +502,10 @@ $('grid').addEventListener('click', async e => {
 });
 
 let current = null;
-function openInNewTab(g) {
-  const url = g.url || g.embed;
-  if (isValidUrl(url)) window.open(url, '_blank', 'noopener');
-}
-$('tabBtn').addEventListener('click', () => { if (current) { openInNewTab(current); closePlayer(); } });
-
-function isValidUrl(u) {
-  try { const p = new URL(u, window.location.href); return p.protocol === 'https:' || p.protocol === 'http:'; } catch (_) { return false; }
-}
-
 function closePlayer() {
   if (fullscreenElement()) exitFullscreen();
   $('panel').classList.remove('full');
   $('player').classList.add('hidden');
-  $('tabBtn').classList.add('hidden');
   current = null;
   fitFrame();
   $('frame').removeAttribute('src');
@@ -536,10 +550,25 @@ function showTip() {
     if (current.keyboardOnly) text = '⌨️ ' + current.title + ' needs a keyboard and mouse. On an iPad, connect a keyboard, or pick another game.';
     else if (innerHeight > innerWidth) text = '↻ Turn your iPad sideways for a bigger game.';
   }
-  tip.textContent = text ? text + '  (tap to hide)' : '';
+  if (leftGame) text = '↩ That link left the game. Tap here to go back to it, or press Close for the arcade.';
+  tip.textContent = text && !leftGame ? text + '  (tap to hide)' : text;
   tip.classList.toggle('hidden', !text);
 }
-$('playerTip').addEventListener('click', () => { if (current) tipHiddenFor = current.title; showTip(); });
+$('playerTip').addEventListener('click', () => {
+  if (leftGame) { reloadGame(); return; }
+  if (current) tipHiddenFor = current.title;
+  showTip();
+});
+
+// Your site can't change the links inside a game from another site, or see where they lead. But it can
+// tell when the player loads a second page, which means one of them took you away from the game.
+let frameLoads = 0, leftGame = false;
+function reloadGame() {
+  leftGame = false;
+  frameLoads = 0;
+  $('frame').src = current.url || current.embed;
+  showTip();
+}
 addEventListener('resize', showTip);
 
 $('fsBtn').addEventListener('click', () => {
@@ -569,6 +598,7 @@ function fitFrame() {
 new ResizeObserver(fitFrame).observe($('frameBox'));
 
 $('frame').addEventListener('load', () => {
+  if (current && current.embed && $('frame').hasAttribute('src') && ++frameLoads > 1) { leftGame = true; showTip(); }
   // Give the game keyboard focus straight away, so arrow keys / WASD work without clicking in first.
   // This has to happen outside the try: games from other sites throw on contentWindow access.
   $('frame').focus();
@@ -586,82 +616,137 @@ const NOTES_ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'
 
 // Starting notes for each subject. Once you type in a subject, your version is saved instead.
 const SUBJECTS = {
-  'English': `Parts of a story
-- Setting: where and when the story takes place.
-- Characters: the people in the story. The main character is called the protagonist.
-- Conflict: the main problem the characters have to deal with.
-- Plot: the order of events. It builds up to the climax (the most exciting part), then the story wraps up.
-- Theme: the big message or life lesson the story is trying to show.
+  'English': `Stuff I need to remember for English
 
-Writing a strong paragraph
-1. Start with a topic sentence that says your main point.
-2. Give evidence, like a quote or an example from the text.
-3. Explain how that evidence backs up your point.
-4. Finish with a sentence that sums it up.`,
+Parts of a story
+- Setting is where and when it happens.
+- The protagonist is the main character, and the conflict is the problem they're stuck dealing with.
+- The climax is the most intense part, right before everything starts wrapping up.
+- Theme isn't just the topic. It's the message the author wants you to take away, so write it as a full sentence.
 
-  'Algebra': `Variables
-A letter like x stands for a number we don't know yet.
+How I write a good paragraph
+1. Start with a sentence that says my main point.
+2. Use a quote or example from the text to back it up.
+3. Explain how that evidence actually proves my point. This is the part I can't skip.
+4. End with a sentence that wraps it up.`,
 
-Solving an equation
-Do the same thing to both sides until x is by itself.
-Example: 2x + 3 = 11
-- Subtract 3 from both sides: 2x = 8
-- Divide both sides by 2: x = 4
+  'Physics': `Kinematics: describing how things move
 
-Order of operations (PEMDAS)
-Parentheses, Exponents, Multiply and Divide (left to right), then Add and Subtract (left to right).
+Scalars vs. vectors
+- Scalar: just a size, like 5 m or 10 s.
+- Vector: a size AND a direction, like 5 m east.
 
-Slope
-Slope tells you how steep a line is.
-slope = rise ÷ run = (y2 - y1) ÷ (x2 - x1)
-In y = mx + b, m is the slope and b is where the line crosses the y-axis.`,
+Distance vs. displacement
+- Distance (scalar): the total path you traveled.
+- Displacement (vector): how far you ended up from the start, and in what direction.
+- Walk 3 m east, then 3 m back: distance = 6 m, displacement = 0 m.
 
-  'Biology': `Cells
-Cells are the smallest living things. Every living thing is made of one or more cells.
-- Nucleus: holds the DNA and controls the cell.
-- Cell membrane: the outer layer that controls what goes in and out.
-- Mitochondria: turn food into energy the cell can use.
-- Plant cells also have a cell wall (for support) and chloroplasts (to make food).
+Formulas
+- speed = distance ÷ time
+- velocity = displacement ÷ time (has a direction)
+- acceleration = change in velocity ÷ time, or a = (v - u) ÷ t
+- Unit for acceleration: m/s²
 
-Photosynthesis
-Plants use sunlight, water and carbon dioxide to make sugar for food. They give off oxygen as a leftover. This happens in the chloroplasts.
+Position-time graphs
+- The slope of the line is the velocity.
+- Steeper line = faster.
+- Flat line = stopped.
+- Line going down = moving back toward the start.
+- Curved line = the velocity is changing, so it's accelerating.`,
 
-Cellular respiration
-Cells break down sugar to get energy. This uses oxygen and gives off carbon dioxide and water. It's kind of the opposite of photosynthesis.`,
+  'Biology': `Atoms
+- Protons (+) and neutrons (no charge) are in the nucleus. Electrons (-) move around it.
 
-  'World History': `Early civilizations
-The first big civilizations started next to rivers:
-- Mesopotamia: Tigris and Euphrates rivers
-- Egypt: Nile River
-- India: Indus River
-- China: Yellow River
+Water
+- Polarity: water has a slightly negative side (oxygen) and slightly positive sides (hydrogen).
+- Cohesion: water sticks to water.
+- Adhesion: water sticks to other things.
 
-Why rivers?
-Rivers gave people water for crops, fish to eat, and an easy way to travel and trade.
+pH scale (0 to 14)
+- Below 7 is acidic, 7 is neutral, above 7 is basic.
+- Each step is 10 times stronger than the last.
 
-What made them "civilizations"
-- Cities and governments
-- Writing (like cuneiform in Mesopotamia and hieroglyphics in Egypt)
-- Jobs besides farming, like traders, builders and priests
+Carbon-based molecules
+- Carbon can form 4 bonds, so it can build long chains and rings.
+- The 4 main types: carbohydrates, lipids, proteins and nucleic acids.
 
-Study tip: for essays, think about cause and effect. What happened, and what did it lead to?`,
+Cell membrane
+- It's a phospholipid bilayer: two layers of phospholipids.
+- Heads are hydrophilic (they like water) and face out.
+- Tails are hydrophobic (they avoid water) and face in.
+- Other parts: proteins, cholesterol and carbohydrates.`,
 
-  'Physical Science': `Matter
-Matter is anything that has mass and takes up space. The three main states are solid, liquid and gas.
+  'Geometry': `Basics
+- Point: a location with no size.
+- Line: straight and goes on forever both ways.
+- Plane: a flat surface that goes on forever.
 
-Atoms
-Atoms are the tiny building blocks of matter.
-- Protons: positive charge, in the center (nucleus)
-- Neutrons: no charge, also in the nucleus
-- Electrons: negative charge, moving around the outside
+Polygons
+- A closed shape with straight sides.
+- Sum of the inside angles = (n - 2) × 180, where n is the number of sides.
 
-Newton's three laws of motion
-1. Things keep doing what they're doing (staying still or moving) unless a force acts on them.
-2. Force = mass × acceleration (F = ma).
-3. Every action has an equal and opposite reaction.
+Angles
+- Acute: less than 90°. Right: exactly 90°. Obtuse: between 90° and 180°.
+- Complementary angles add up to 90°. Supplementary angles add up to 180°.
 
-Speed
-speed = distance ÷ time`,
+Area
+- Rectangle: length × width
+- Triangle: ½ × base × height
+- Parallelogram: base × height
+- Trapezoid: ½ × (base 1 + base 2) × height
+- Circle: π × r²
+
+Systems of linear equations
+- Solve by substitution or elimination.
+- The answer is the point where the two lines cross.
+
+Quadratic formula, for ax² + bx + c = 0
+x = (-b ± √(b² - 4ac)) ÷ 2a`,
+
+  'Chemistry': `Matter and density
+- Matter is anything with mass that takes up space.
+- density = mass ÷ volume
+
+Physical vs. chemical changes
+- Physical: same substance, new form (melting, cutting, dissolving).
+- Chemical: a new substance forms (burning, rusting).
+
+Sorting matter
+- Pure substances: elements (one kind of atom) and compounds (elements bonded together, like H₂O).
+- Mixtures: homogeneous (looks the same throughout, like salt water) or heterogeneous (you can see the parts, like salad).
+
+Atomic models
+- J.J. Thomson: discovered the electron. "Plum pudding" model, with electrons mixed through a positive ball.
+- Rutherford: gold foil experiment. Atoms are mostly empty space with a tiny, dense, positive nucleus.
+
+Isotopes
+- Same element and same number of protons, but a different number of neutrons.
+- Example: carbon-12 and carbon-14.
+
+Bonding
+- Ionic: electrons are transferred (metal + nonmetal).
+- Covalent: electrons are shared (nonmetal + nonmetal).
+- Lewis dot structures show the valence electrons as dots around the element's symbol.`,
+
+  'History': `BCE and CE
+- BCE counts down toward year 1, so 500 BCE comes before 200 BCE.
+- CE counts up from year 1.
+- To find the time between a BCE year and a CE year, add them together (about, since there's no year 0).
+
+Song Dynasty China (960 to 1279 CE)
+- Civil service exams tested Confucian texts, so government jobs depended more on merit than on family.
+- Foot binding spread among elite families. In a patriarchal society, it was seen as a sign of beauty and status, helped with marriage, and kept women at home and dependent on men.
+
+Dar al-Islam ("the house of Islam," the lands under Muslim rule)
+- Nasir al-Din al-Tusi: Persian scholar who led the Maragha observatory and made major advances in astronomy and trigonometry.
+- Ibn Khaldun: North African historian who explained how dynasties rise and fall in the Muqaddimah.
+
+Islam vs. Hinduism
+- God: Islam has one God (Allah). Hinduism has many gods, often seen as forms of one reality (Brahman).
+- Founder: Islam has the Prophet Muhammad. Hinduism has no single founder.
+- Texts: Islam has the Quran. Hinduism has the Vedas and other texts.
+- After death: Islam teaches judgment, then heaven or hell. Hinduism teaches reincarnation based on karma.
+- Society: Islam teaches that all believers are equal before God. Hinduism is historically tied to the caste system.`,
 
   'Computer Science Java': `What a program is
 A program is a list of steps you give the computer. Java runs them one at a time, from top to bottom.
@@ -706,6 +791,14 @@ function store(key, value) {
     localStorage.setItem(key, value);
     return true;
   } catch (_) { return value === undefined ? null : false; }
+}
+
+// Subjects that changed name keep whatever was already typed in them.
+const RENAMED_SUBJECTS = { 'Algebra': 'Geometry', 'World History': 'History', 'Physical Science': 'Physics' };
+for (const [oldName, newName] of Object.entries(RENAMED_SUBJECTS)) {
+  const typed = store(NOTES_KEY + oldName);
+  if (typed !== null && store(NOTES_KEY + newName) === null) store(NOTES_KEY + newName, typed);
+  if (store(SUBJECT_KEY) === oldName) store(SUBJECT_KEY, newName);
 }
 
 $('subject').innerHTML = Object.keys(SUBJECTS).map(name => `<option>${name}</option>`).join('');
