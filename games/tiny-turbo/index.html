@@ -63,8 +63,21 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .tb.on{background:rgba(255,198,26,.35)}
 .tb.gas{height:90px;background:rgba(58,208,122,.25)}
 .tb.nos{background:rgba(255,106,43,.3)}
-body.touch .hud-bl{bottom:calc(110px + env(safe-area-inset-bottom,0px))}
-body.touch .hud-br{bottom:calc(120px + env(safe-area-inset-bottom,0px))}
+body.touch .tb{width:clamp(68px,10vmin,92px);height:clamp(68px,10vmin,92px)}
+body.touch .tb.gas{height:clamp(90px,14vmin,124px)}
+body.touch .hud-bl{bottom:calc(136px + env(safe-area-inset-bottom,0px))}
+body.touch .hud-br{bottom:calc(146px + env(safe-area-inset-bottom,0px))}
+body.touch .kbd-only{display:none}
+.touch-only{display:none}
+body.touch .touch-only{display:block}
+#touch .top{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:flex;gap:10px;pointer-events:auto}
+.tsm{min-width:56px;height:48px;padding:0 12px;border-radius:12px;border:2px solid rgba(255,255,255,.25);background:rgba(16,20,29,.65);color:var(--ink);font:700 15px var(--ui);touch-action:manipulation}
+.tsm:active{background:rgba(255,198,26,.35)}
+/* The page itself doesn't move, but anything long enough to scroll has to follow a finger. */
+.screen,.card,.items,.gpanel,.tabs{touch-action:pan-x pan-y}
+.screen,.items,.gpanel{-webkit-overflow-scrolling:touch}
+.screen{overflow-y:auto}
+button{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
 
 /* screens */
 .screen{position:fixed;inset:0;display:flex;align-items:center;overflow-y:auto;
@@ -145,6 +158,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
   .board{display:none}
   .res-grid{grid-template-columns:1fr 1fr}
 }
+@media (max-height:640px){.board,#graph,#graph+.lbl{display:none}}
 @media (prefers-reduced-motion:reduce){.btn,#speedlines,.nitro-fill{transition:none}}
 [hidden]{display:none!important}
 #olCode{font:900 36px ui-monospace,monospace;letter-spacing:.2em;text-align:center;padding:10px;background:rgba(0,0,0,.35);border:1px dashed var(--line);border-radius:12px}
@@ -176,13 +190,14 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
     <div class="plate"><canvas id="graph" width="440" height="148"></canvas><div class="lbl">Speed · last 10 s</div></div>
   </div>
   <div class="hud-br">
-    <div class="plate nitro-box"><div class="lbl">Nitro · Shift</div><div class="nitro-bar"><div class="nitro-fill" id="hNitro"></div></div></div>
+    <div class="plate nitro-box"><div class="lbl">Nitro<span class="kbd-only"> · Shift</span></div><div class="nitro-bar"><div class="nitro-fill" id="hNitro"></div></div></div>
   </div>
 </div>
 <div id="flash"></div>
 <div id="countdown" hidden></div>
 
 <div id="touch" hidden>
+  <div class="top"><button class="tsm" id="tPause" aria-label="Pause">⏸ Pause</button><button class="tsm" id="tReset" aria-label="Put car back on the track">↺ Back on track</button></div>
   <div class="grp"><button class="tb" data-k="left" aria-label="Steer left">◀</button><button class="tb" data-k="right" aria-label="Steer right">▶</button></div>
   <div class="grp"><button class="tb nos" data-k="nitro">N₂O</button><button class="tb" data-k="brake" aria-label="Brake">▼</button><button class="tb gas" data-k="gas" aria-label="Gas">▲</button></div>
 </div>
@@ -205,7 +220,8 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
 <div id="howto" class="screen scrim-full" hidden>
   <div class="card">
     <h2>How to Play</h2>
-    <div class="keys">
+    <p class="touch-only">Hold ◀ ▶ to steer, ▲ for gas, ▼ to brake and N₂O for nitro. Tap Back on track if you get stuck.</p>
+    <div class="keys kbd-only">
       <span><kbd>W</kbd> <kbd>↑</kbd></span><span>Gas</span>
       <span><kbd>S</kbd> <kbd>↓</kbd></span><span>Brake / reverse</span>
       <span><kbd>A</kbd> <kbd>D</kbd> <kbd>← →</kbd></span><span>Steer</span>
@@ -317,7 +333,7 @@ function statsFor(cfg,up){
 
 /* ---------------- renderer & scene ---------------- */
 const renderer=new THREE.WebGLRenderer({canvas:$('gl'),antialias:true});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,navigator.maxTouchPoints>0?1.5:2));   // keeps tablets smooth
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.outputEncoding=THREE.sRGBEncoding;
 const scene=new THREE.Scene();
@@ -670,7 +686,15 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyR'&&state==='race'&&player&&!player.finished)resetCar(player);
 });
 addEventListener('keyup',e=>{if(KMAP[e.code])keys[KMAP[e.code]]=false;});
-addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
+// Lets go of everything, so a press can't stay stuck when the game loses focus.
+function releaseKeys(){for(const k in keys)keys[k]=tkeys[k]=false;document.querySelectorAll('#touch .tb.on').forEach(b=>b.classList.remove('on'));}
+addEventListener('blur',releaseKeys);
+document.addEventListener('visibilitychange',()=>{
+  releaseKeys();
+  if(document.hidden&&!online.on)pauseGame();    // online races wait for you instead
+});
+$('tPause').onclick=()=>pauseGame();
+$('tReset').onclick=()=>{if(state==='race'&&player&&!player.finished)resetCar(player);};
 document.querySelectorAll('#touch .tb').forEach(b=>{const k=b.dataset.k;
   const on=e=>{e.preventDefault();tkeys[k]=true;b.classList.add('on');initAudio();};const off=e=>{e.preventDefault();tkeys[k]=false;b.classList.remove('on');};
   b.addEventListener('pointerdown',e=>{on(e);try{b.setPointerCapture(e.pointerId);}catch(_){}});b.addEventListener('pointerup',off);b.addEventListener('pointercancel',off);b.addEventListener('contextmenu',e=>e.preventDefault());});
@@ -890,7 +914,8 @@ $('bRace').onclick=soloRace;$('gRace').onclick=soloRace;$('rAgain').onclick=()=>
 $('bGarage').onclick=openGarage;$('rGarage').onclick=openGarage;
 $('bHow').onclick=()=>show('howto');$('bHowBack').onclick=()=>show('menu');
 $('gBack').onclick=toMenu;$('rMenu').onclick=toMenu;$('pQuit').onclick=toMenu;$('pResume').onclick=resumeGame;
-document.addEventListener('pointerdown',initAudio,{once:true});
+// iPads only allow sound after a finished tap, and can suspend it again later.
+document.addEventListener('pointerup',()=>{initAudio();if(AC&&AC.state==='suspended')AC.resume();});
 
 /* ---------------- resize ---------------- */
 function resize(){
