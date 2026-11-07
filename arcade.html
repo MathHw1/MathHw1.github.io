@@ -103,6 +103,7 @@
     <details class="mb-3 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 sm:px-5 py-3">
       <summary class="cursor-pointer select-none font-semibold text-violet-200">🛠️ Bugs &amp; fixes</summary>
       <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
+        <li><b>Game cards:</b> Wheelie Life and Tiny Turbo cards now show a snapshot from your last ride.</li>
         <li><b>Tiny Turbo:</b> better on iPad, with on-screen Pause and Back on track buttons, bigger controls and scrolling that works.</li>
         <li><b>Tiny Turbo:</b> new racing game with touch controls and 4-player ghost races.</li>
         <li><b>Wheelie Life:</b> levels, MPH and miles, boost and plow pickups, a smoother rider and real crashes, plus 4-player races.</li>
@@ -250,6 +251,7 @@ const GAMES = [
     source: 'original', 
     desc: 'Keep your wheel up, dodge obstacles and earn cash for new rides.', 
     img: 'games/nebula-wheelie/cover.jpg?v=2', 
+    thumbKey: 'wheelie_life_thumb', 
     url: 'games/nebula-wheelie/index.html' 
   },
   { 
@@ -259,6 +261,7 @@ const GAMES = [
     desc: 'Race three laps, grab coins and take on up to 3 friends online.', 
     credit: 'Credit to Aqeel', 
     img: 'games/tiny-turbo/cover.svg', 
+    thumbKey: 'tiny_turbo_thumb', 
     url: 'games/tiny-turbo/index.html' 
   },
   { 
@@ -429,13 +432,22 @@ function renderNav() {
     </button>`).join('');
 }
 
+// Games that save a snapshot from your last ride show that instead of their usual cover.
+function coverFor(game) {
+  try {
+    const saved = game.thumbKey && localStorage.getItem(game.thumbKey);
+    if (saved && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(saved)) return saved;
+  } catch (_) {}
+  return game.img;
+}
+
 function renderGrid() {
   $('grid').innerHTML = GAMES.map((g, i) => `
     <article data-play="${i}" class="game-card card-glow relative rounded-2xl overflow-hidden bg-[#151925] border border-white/5"
              data-title="${g.title.toLowerCase()}" data-desc="${g.desc.toLowerCase()}" data-genre="${g.genre}">
       <div class="relative aspect-[4/3] overflow-hidden bg-slate-900">
         ${g.img
-          ? `<img class="thumb absolute inset-0 w-full h-full object-cover" src="${g.img}" alt="${g.title}" loading="lazy" onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%25\' height=\'100%25\' viewBox=\'0 0 100 100\'%3E%3Crect width=\'100\' height=\'100\' fill=\'%231e293b\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%2394a3b8\' font-size=\'12\' font-family=\'sans-serif\'%3E🎮 ${g.title}%3C/text%3E%3C/svg%3E';">`
+          ? `<img class="thumb absolute inset-0 w-full h-full object-cover" src="${coverFor(g)}" alt="${g.title}" loading="lazy" onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%25\' height=\'100%25\' viewBox=\'0 0 100 100\'%3E%3Crect width=\'100\' height=\'100\' fill=\'%231e293b\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%2394a3b8\' font-size=\'12\' font-family=\'sans-serif\'%3E🎮 ${g.title}%3C/text%3E%3C/svg%3E';">`
           : `<div class="thumb absolute inset-0 bg-gradient-to-br from-violet-600 to-slate-900 flex items-center justify-center">
                <p class="text-2xl font-extrabold">${g.title}</p>
              </div>`}

@@ -3,6 +3,23 @@
 // The player's profile for the whole arcade: a private device ID, their username and their stats.
 // It lives in localStorage with a copy in IndexedDB, which brings it back if iPad Safari clears one.
 
+// Keeps a small picture of a game for its arcade card. A WebGL canvas clears itself after each
+// frame, so call this straight after drawing. Shrinking it keeps it from filling localStorage.
+// It's cut to the card's 4:3 shape around focusX, a share of the width, to keep the action in frame.
+const THUMB_WIDTH = 480, THUMB_HEIGHT = 360;
+function saveThumbnail(canvas, key, focusX) {
+    try {
+        const small = document.createElement('canvas');
+        small.width = THUMB_WIDTH;
+        small.height = THUMB_HEIGHT;
+        const width = Math.min(canvas.width, canvas.height * 4 / 3), height = width * 3 / 4;
+        const left = Math.max(0, Math.min(canvas.width - width, canvas.width * (focusX === undefined ? 0.5 : focusX) - width / 2));
+        const top = (canvas.height - height) * 0.75;      // the road is near the bottom
+        small.getContext('2d').drawImage(canvas, left, top, width, height, 0, 0, THUMB_WIDTH, THUMB_HEIGHT);
+        localStorage.setItem(key, small.toDataURL('image/png'));
+    } catch (_) {}
+}
+
 const NebulaProfile = (function () {
     const KEY = 'nebula-profile';
     const OLD_NAME_KEY = 'nebula-player-name';
