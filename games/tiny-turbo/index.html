@@ -74,6 +74,16 @@ body.touch .hud-bl{bottom:calc(var(--steer) + 26px + env(safe-area-inset-bottom,
 body.touch .hud-br{bottom:calc(var(--pedal) * 1.25 + 26px + env(safe-area-inset-bottom,0px))}
 body.touch .times,body.touch .board,body.touch .graph-plate,body.touch.racing #mute{display:none}
 body.touch #mph{font-size:40px}
+/* Throw, back and look sit in one row just above the pedals, in reach of the right thumb. */
+#touch .items{position:fixed;right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(var(--pedal,90px) * 1.25 + 26px + env(safe-area-inset-bottom,0px));display:flex;gap:10px;pointer-events:auto}
+#touch .tb.item{width:calc(var(--steer,68px) * .75);height:calc(var(--steer,68px) * .75);font-size:22px;line-height:1.1;opacity:.45}
+#touch .tb.item.ready{opacity:1;background:rgba(178,107,255,.35)}
+#touch .tb.item small{font-size:11px}
+.item-slot{font-size:30px;min-width:56px;text-align:center}
+#touch .tb.look{width:calc(var(--steer,68px) * .75);height:calc(var(--steer,68px) * .75);font-size:22px;line-height:1.1}
+#touch .tb.look small{font-size:11px}
+#tLook.on{background:rgba(255,198,26,.45)}
+body.touch .hud-br{bottom:calc(var(--pedal,90px) * 1.25 + var(--steer,68px) * .75 + 44px + env(safe-area-inset-bottom,0px))}
 body.touch #mini{width:110px;height:110px}
 body.touch .kbd-only{display:none}
 .touch-only{display:none}
@@ -194,6 +204,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
   </div>
   <div class="hud-tr">
     <div class="plate coins num"><span class="coin-ico"></span><span id="hCoins">0</span></div>
+    <div class="plate item-slot" title="Item: Space or E (hold S to aim back)"><span id="hItem">—</span></div>
     <div class="plate" style="padding:6px"><canvas id="mini" width="300" height="300"></canvas></div>
   </div>
   <div class="hud-bl">
@@ -209,6 +220,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
 
 <div id="touch" hidden>
   <div class="top"><button class="tsm" id="tPause" aria-label="Pause">⏸</button><button class="tsm" id="tReset" aria-label="Put car back on the track">↺</button></div>
+  <div class="items"><button class="tb item" id="tThrow" aria-label="Use item forward">⬆<br><small>THROW</small></button><button class="tb item" id="tBack" aria-label="Use item behind">⬇<br><small>BACK</small></button><button class="tb look" id="tLook" aria-label="Look behind">👀<br><small>LOOK</small></button></div>
   <div class="grp"><button class="tb" data-k="left" aria-label="Steer left">◀</button><button class="tb" data-k="right" aria-label="Steer right">▶</button></div>
   <div class="grp"><button class="tb" data-k="brake" aria-label="Brake">▼</button><button class="tb nos" data-k="nitro" aria-label="Nitro boost">🔥<br>NITRO</button><button class="tb gas" data-k="gas" aria-label="Gas">▲</button></div>
 </div>
@@ -233,7 +245,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
 <div id="howto" class="screen scrim-full" hidden>
   <div class="card">
     <h2>How to Play</h2>
-    <p>Every course has a hazard: mud in Pine Valley, quicksand in Sunset Dunes, ice in Frost Peak and shock pads in Neon City. They're hard to spot, so watch the road. Sunset Dunes, Frost Peak and Neon City have cliff jumps: hit the ramp fast to fly over, or fall in and wait 3 seconds. Use nitro in the first 3 seconds and you're frozen for 3.</p>
+    <p>Every course has a hazard: mud in Pine Valley, quicksand in Sunset Dunes, ice in Frost Peak and shock pads in Neon City. They're hard to spot, so watch the road. Sunset Dunes, Frost Peak and Neon City have cliff jumps that are too wide to clear without nitro. Fall in and you wait 3 seconds. Blue canisters before each jump refill your nitro. Use nitro in the first 3 seconds and you're frozen for 3.</p>
     <p class="touch-only">Hold ◀ ▶ to steer and ▲ to drive. Hold NITRO to drive with a boost. ▼ brakes. Tap ↺ if you get stuck, or ⏸ to pause.</p>
     <div class="keys kbd-only">
       <span><kbd>W</kbd> <kbd>↑</kbd></span><span>Gas</span>
@@ -241,6 +253,8 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
       <span><kbd>A</kbd> <kbd>D</kbd> <kbd>← →</kbd></span><span>Steer</span>
       <span><kbd>Shift</kbd> <kbd>N</kbd></span><span>Nitro boost (hold)</span>
       <span><kbd>R</kbd></span><span>Put car back on the track</span>
+      <span><kbd>Space</kbd> <kbd>E</kbd></span><span>Use item (hold <kbd>S</kbd> to aim behind)</span>
+      <span><kbd>C</kbd></span><span>Look behind (hold)</span>
       <span><kbd>P</kbd> <kbd>Esc</kbd></span><span>Pause</span>
     </div>
     <p>Finish 3 laps first. The grass slows you down, so stay on the asphalt. Gold coins respawn every lap, and blue canisters refill nitro. Win coins to buy paint, bodies, spoilers, wheels, decals and performance upgrades.</p>
@@ -308,6 +322,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
 <script src="../shared/lobby-client.js"></script>
 <script src="../shared/touch-keyboard.js"></script>
 <script src="../shared/profile.js"></script>
+<script src="../shared/ban.js"></script>
 <script src="../shared/scores.js"></script>
 <script>
 (function(){
@@ -384,7 +399,7 @@ const MAPS=[
    sky:['#05051a','#1b0b3a','#3b1060'],fog:0x1a0d33,fogNear:180,fogFar:800,grass:['#14142a','#17172f'],road:['#26283e','#23253a'],verge:'#2a1b4a',wall:['#ff2bd6','#22e3ff'],
    hemi:[0x8a6cff,0x10081f,.6],sun:[0xc9b8ff,.55],scenery:'city',hazard:'shock'}
 ];
-const W=22,WALL=W/2+12,COURSE_SCALE=1.6,UNITS_PER_POINT=3;
+const W=28,WALL=W/2+12,COURSE_SCALE=1.6,UNITS_PER_POINT=3;
 let N=1000;   // points along the road; longer courses get more, so each point is about the same distance apart
 const P=[],T=[],NR=[],K=[];
 const headingAt=i=>Math.atan2(T[i].x,T[i].z);
@@ -420,13 +435,14 @@ function scenery(map){
 //   slow: share of top speed you keep inside it.  grip: share of steering you keep (ice).
 //   stall: seconds the engine cuts out after touching it.  size: radius in metres.
 const HAZARDS={
-  mud:{say:'🟤 Mud!',colour:'#4a3826',opacity:.75,size:6,hit:.55,slow:.5},
-  sand:{say:'🏜️ Quicksand!',colour:'#b3925c',opacity:.7,size:6.5,hit:.45,slow:.38},
-  ice:{say:'🧊 Ice! Slippery',colour:'#dcf3ff',opacity:.38,size:9,grip:.12},
-  shock:{say:'⚡ Shorted out!',colour:'#1f2a44',opacity:.85,size:5.5,hit:.6,stall:1.6,glow:'#22e3ff'}
+  mud:{say:'🟤 Mud! Slowed for 5s',colour:'#4a3826',opacity:.75,size:7,hit:.7,slowFor:5,slow:.42},
+  sand:{say:'🏜️ Quicksand! Stuck for 5s',colour:'#b3925c',opacity:.7,size:7,stuck:5,slow:.35},
+  ice:{say:'🧊 Ice! No grip',colour:'#dcf3ff',opacity:.38,size:10,grip:.05},
+  shock:{say:'⚡ Shorted out!',colour:'#1f2a44',opacity:.85,size:6.5,hit:.5,stall:3,glow:'#22e3ff'}
 };
-//   hit: share of your speed left the moment you touch it.  slow: share of top speed while inside.
-//   grip: share of steering left (ice).  stall: seconds with no engine.  size: half-width in metres.
+//   hit: share of your speed left the moment you touch it.  slowFor: seconds you stay slowed, even after leaving.
+//   stuck: seconds held completely still.  slow: share of top speed while slowed.  grip: share of steering
+//   left (ice).  stall: seconds with no engine.  size: half-width in metres.
 // They're tinted close to the road on purpose, so you have to watch for them.
 const HAZARD_COUNT=8;
 const hazards=[];   // { i, x, z, size, type }
@@ -435,7 +451,7 @@ function placeHazards(map){
   for(let k=0;k<HAZARD_COUNT;k++){
     // Spread round the lap, clear of the start and the jumps, and the same every time so online races match.
     let i=Math.floor(90+(N-150)*(k+.5)/HAZARD_COUNT);
-    while(jumps.some(j=>i>j.rampStart-40&&i<j.end+25))i=(i+40)%N;
+    while(jumps.some(j=>i>j.rampStart-120&&i<j.end+25))i=(i+40)%N;   // keep every jump's run-up clear
     const lat=Math.sin(i*1.7+k)*W*.25,x=P[i].x+NR[i].x*lat,z=P[i].z+NR[i].z*lat;hazards.push({i,x,z,size:h.size,type:map.hazard});
     const patch=new THREE.Mesh(new THREE.CircleGeometry(1,28),new THREE.MeshStandardMaterial({color:h.colour,transparent:true,opacity:h.opacity,depthWrite:false,
       roughness:map.hazard==='ice'?.05:.95,metalness:map.hazard==='ice'?.4:0,emissive:h.glow||'#000',emissiveIntensity:h.glow?.07:0}));
@@ -447,10 +463,12 @@ const hazardAt=c=>hazards.find(h=>{const dx=c.pos.x-h.x,dz=c.pos.z-h.z,t=T[h.i],
   const along=(dx*t.x+dz*t.z)/(h.size*1.4),across=(dx*n.x+dz*n.z)/h.size;return along*along+across*across<1;});
 
 // ---------- Cliff jumps ----------
-// A ramp leads up to a gap in the road. Fast enough and you fly over it. Too slow and you fall in,
-// then wait a few seconds before you're put back on the far side.
-const JUMP_LEN=14,JUMP_RAMP=12,JUMP_RAMP_HEIGHT=1.8,JUMP_ARC=7,FALL_SECONDS=3;
-const JUMP_SPEED=.68;   // share of the class's normal top speed you need at the lip
+// A ramp leads up to a gap in the road. The ramp only gives you its own launch: how far you fly comes
+// from your speed alone, and the gaps are wide enough that you need nitro to clear them. Fall in and
+// you wait a few seconds before you're put back on the far side.
+const JUMP_LEN=16,JUMP_RAMP=12,JUMP_RAMP_HEIGHT=1.8,FALL_SECONDS=3;
+// With these, flat out at your car's own top speed lands just short, and a nitro run-up clears it.
+const LAUNCH_SLOPE=.2,GRAVITY=40,BASE_TOP=58;
 const jumps=[];         // { rampStart, start, end }
 function placeJumps(map){
   jumps.length=0;
@@ -459,7 +477,7 @@ function placeJumps(map){
     let best=-1,bestScore=1e9;
     for(let i=Math.floor(N*.15);i<N*.9;i+=5){
       if(jumps.some(j=>Math.abs(i-j.start)<N/4))continue;
-      let worst=0;for(let k=-70;k<=JUMP_LEN+30;k++)worst=Math.max(worst,K[(i+k+N)%N]);
+      let worst=0;for(let k=-90;k<=JUMP_LEN+30;k++)worst=Math.max(worst,K[(i+k+N)%N]);
       if(worst<bestScore){bestScore=worst;best=i;}
     }
     if(best>0)jumps.push({rampStart:best-JUMP_RAMP,start:best,end:best+JUMP_LEN});
@@ -468,25 +486,144 @@ function placeJumps(map){
 const gapAt=i=>jumps.find(j=>i>=j.start&&i<j.end);
 const jumpNear=i=>jumps.find(j=>i>=j.rampStart&&i<=j.end+2);
 
-// Runs after each car moves: ramps lift it, gaps launch or drop it.
-function jumpStep(c){
-  const j=jumpNear(c.idx);
+// Runs after each car moves: ramps lift it, the lip launches it, and gravity brings it down.
+// Gravity grows with each car's own top speed, so upgrades and faster classes still need nitro to clear.
+function jumpStep(c,dt){
   if(c.air){
-    const f=(c.idx-c.air.start)/(c.air.end-c.air.start);
-    if(f>=1||!j){c.air=null;c.pos.y=0;if(c.isPlayer)beep(180,.12,'square',.12);}
-    else c.pos.y=JUMP_RAMP_HEIGHT+JUMP_ARC*4*f*(1-f);
+    const r=c.stats.top/BASE_TOP;c.air.vy-=GRAVITY*r*r*dt;
+    c.pos.y+=c.air.vy*dt;
+    if(c.pos.y<=0){
+      c.pos.y=0;
+      if(gapAt(c.idx)){c.air=null;startFall(c,jumpNear(c.idx));}
+      else{c.air=null;if(c.isPlayer)beep(180,.12,'square',.12);}
+    }
     return;
   }
+  const j=jumpNear(c.idx);
   if(!j){c.pos.y=0;return;}
   if(c.idx<j.start){c.pos.y=JUMP_RAMP_HEIGHT*(c.idx-j.rampStart)/JUMP_RAMP;return;}
   if(c.idx<j.end){
-    const need=JUMP_SPEED*(58*raceClass.speed);
-    if(c.speed>=need){c.air=j;if(c.isPlayer){flash('🚀 Jump!');whoosh();}}
-    else{c.fall={until:raceT+FALL_SECONDS,jump:j};c.speed=0;if(c.isPlayer){flash('💥 You fell! Back in '+FALL_SECONDS);beep(110,.4,'sawtooth',.14);}}
+    if(c.speed>3){c.air={vy:LAUNCH_SLOPE*c.speed};c.pos.y=JUMP_RAMP_HEIGHT;if(c.isPlayer)whoosh();}
+    else startFall(c,j);
     return;
   }
   c.pos.y=0;
 }
+function startFall(c,j){
+  c.fall={until:raceT+FALL_SECONDS,jump:j};c.speed=0;
+  if(c.isPlayer){flash('💥 Too short! Back in '+FALL_SECONDS);beep(110,.4,'sawtooth',.14);}
+}
+// ---------- Item boxes and items ----------
+// Rows of boxes across the road. Grab one and you hold an item until you use it. What you get depends
+// on your place: leaders mostly get slicks to defend with, the back of the pack gets orbs and boosts.
+const ITEM_ZONES=[.2,.42,.64,.86],ITEM_RESPAWN=3,BOXES_PER_ZONE=6;
+const ITEMS={slick:{icon:'🛢️',name:'Slick'},orb:{icon:'🔮',name:'Homing orb'},boost:{icon:'⚡',name:'Boost'}};
+const ODDS=[{slick:.8,orb:.1,boost:.1},{slick:.45,orb:.35,boost:.2},{slick:.1,orb:.5,boost:.4}];   // 1st, 2nd–3rd, 4th–6th
+const itemBoxes=[],slicks=[],orbs=[];
+let boxMat=null,boxGeo=null,slickGeo=null,slickMat=null,orbGeo=null,orbMat=null;
+function placeItemBoxes(){
+  itemBoxes.length=0;slicks.length=0;orbs.length=0;
+  if(!boxGeo){
+    const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+    g.fillStyle='#ffd23f';g.fillRect(0,0,64,64);g.fillStyle='#ff8a00';g.fillRect(4,4,56,56);g.fillStyle='#fff';g.font='bold 46px system-ui';g.textAlign='center';g.textBaseline='middle';g.fillText('?',32,35);
+    boxGeo=new THREE.BoxGeometry(2,2,2);boxMat=new THREE.MeshStandardMaterial({map:new THREE.CanvasTexture(c),emissive:'#ff9a1f',emissiveIntensity:.45,transparent:true,opacity:.92});
+    slickGeo=new THREE.CircleGeometry(2.2,20);slickMat=new THREE.MeshStandardMaterial({color:'#15121a',roughness:.05,metalness:.6});
+    orbGeo=new THREE.SphereGeometry(.9,14,10);orbMat=new THREE.MeshStandardMaterial({color:'#b26bff',emissive:'#8a3dff',emissiveIntensity:1.2});
+  }
+  for(const f of ITEM_ZONES){
+    let i=Math.floor(f*N);while(jumpNear(i)||jumps.some(j=>i>j.rampStart-30&&i<j.end+15))i=(i+25)%N;
+    for(let k=0;k<BOXES_PER_ZONE;k++){
+      const lat=-W/2+3+(W-6)*k/(BOXES_PER_ZONE-1),m=new THREE.Mesh(boxGeo,boxMat);
+      m.position.set(P[i].x+NR[i].x*lat,1.6,P[i].z+NR[i].z*lat);track.add(m);itemBoxes.push({m,back:0});
+    }
+  }
+}
+// Extras the owner can switch on for this device: infinite coins and super speed.
+let perks={coins:false,speed:1};
+function applyPerks(){
+  if(perks.coins&&save.coins<999999){save.coins=999999;persist();refreshMenu();}
+  if(player)player.perkSpeed=perks.speed>1?perks.speed:0;
+}
+function checkPerks(){
+  fetch(LOBBY_SERVER_URL+'/perks/'+NebulaProfile.deviceId()).then(r=>r.ok?r.json():null).then(p=>{if(p){perks=p;applyPerks();}}).catch(()=>{});
+}
+setInterval(checkPerks,20000);
+
+function placeOf(c){const order=rankCars();return order.indexOf(c)+1;}
+function rollItem(c){
+  const place=online.on?3:placeOf(c),odds=ODDS[place<=1?0:place<=3?1:2];let r=Math.random();
+  for(const k of ['slick','orb','boost']){r-=odds[k];if(r<=0)return k;}
+  return 'boost';
+}
+function spinOut(c,secs){if(c.spinUntil>raceT)return;c.spinUntil=raceT+secs;c.speed*=.35;c.aiBoost=0;if(c.isPlayer){flash('💫 Spun out!');beep(200,.3,'triangle',.14);}}
+const fwd=c=>({x:Math.sin(c.h),z:Math.cos(c.h)});
+
+// Uses the item a car is holding. back: drop or fire it behind instead of in front.
+function useItem(c,back){
+  const it=c.item;if(!it||c.fall||c.air)return;c.item=null;
+  const d=fwd(c);
+  if(it==='slick'){
+    const dist=back?-5:28,m=new THREE.Mesh(slickGeo,slickMat);m.rotation.x=-Math.PI/2;
+    const x=c.pos.x+d.x*dist,z=c.pos.z+d.z*dist;m.position.set(x,.12,z);track.add(m);
+    const sl={m,x,z,owner:c,born:raceT,id:Math.random().toString(36).slice(2)};slicks.push(sl);
+    if(online.on&&c.isPlayer)online.lobby.send({t:'slick',x,z,id:sl.id});
+  }
+  else if(it==='orb'){
+    const m=new THREE.Mesh(orbGeo,orbMat);m.position.set(c.pos.x+d.x*(back?-4:4),1.2,c.pos.z+d.z*(back?-4:4));track.add(m);
+    orbs.push({m,owner:c,target:orbTarget(c,back),dir:back?{x:-d.x,z:-d.z}:d,born:raceT});
+  }
+  else{c.nitro=1;c.nitroEmpty=false;c.itemBoost=raceT+1.6;}
+  if(c.isPlayer){beep(it==='boost'?880:520,.12,'square',.12);updateItemHud();}
+}
+// The nearest racer ahead (or behind) in the race, or a friend's ghost in an online race.
+function orbTarget(c,back){
+  if(online.on){
+    let best=null,bd=1e9;for(const [seat,g] of online.ghosts){const dx=g.mesh.position.x-c.pos.x,dz=g.mesh.position.z-c.pos.z,ahead=dx*Math.sin(c.h)+dz*Math.cos(c.h);
+      if(back?ahead<0:ahead>0){const d=dx*dx+dz*dz;if(d<bd){bd=d;best={ghost:seat};}}}
+    return best;
+  }
+  const order=rankCars(),i=order.indexOf(c),t=order[back?i+1:i-1];
+  return t&&!t.finished?{car:t}:null;
+}
+function itemsStep(dt){
+  for(const b of itemBoxes){
+    if(b.back>0&&raceT>=b.back){b.back=0;b.m.visible=true;}
+    if(b.m.visible){b.m.rotation.y+=dt*1.6;b.m.rotation.x+=dt*.7;
+      for(const c of cars){if(c.item||c.fall||c.air)continue;const dx=b.m.position.x-c.pos.x,dz=b.m.position.z-c.pos.z;
+        if(dx*dx+dz*dz<7){b.m.visible=false;b.back=raceT+ITEM_RESPAWN;c.item=rollItem(c);c.itemAt=raceT;
+          if(c.isPlayer){flash(ITEMS[c.item].icon+' '+ITEMS[c.item].name+'!');beep(1180,.1,'square',.1);updateItemHud();}break;}}}
+  }
+  for(let k=slicks.length-1;k>=0;k--){
+    const sl=slicks[k];let gone=raceT-sl.born>45;
+    for(const c of cars){if(gone)break;if(c.air||c.fall||(c===sl.owner&&raceT-sl.born<.8))continue;const dx=sl.x-c.pos.x,dz=sl.z-c.pos.z;
+      if(dx*dx+dz*dz<6){spinOut(c,1.3);gone=true;if(online.on&&c.isPlayer)online.lobby.send({t:'slickGone',id:sl.id});}}
+    if(gone){track.remove(sl.m);slicks.splice(k,1);}
+  }
+  for(let k=orbs.length-1;k>=0;k--){
+    const o=orbs[k],p=o.m.position;let tx=null,tz=null;
+    if(o.target&&o.target.car){tx=o.target.car.pos.x;tz=o.target.car.pos.z;}
+    else if(o.target&&o.target.ghost!==undefined){const g=online.ghosts.get(o.target.ghost);if(g){tx=g.mesh.position.x;tz=g.mesh.position.z;}}
+    if(tx!==null){const dx=tx-p.x,dz=tz-p.z,d=Math.hypot(dx,dz)||1;o.dir={x:dx/d,z:dz/d};}
+    const sp=Math.max(95,(o.target&&o.target.car?Math.abs(o.target.car.speed):60)+35);
+    p.x+=o.dir.x*sp*dt;p.z+=o.dir.z*sp*dt;let gone=raceT-o.born>6;
+    if(tx!==null&&Math.hypot(tx-p.x,tz-p.z)<2.6){gone=true;
+      if(o.target.car)spinOut(o.target.car,1.8);
+      else if(online.on)online.lobby.send({t:'hit',s:o.target.ghost});}
+    if(gone){track.remove(o.m);orbs.splice(k,1);}
+  }
+  // Rivals use what they hold.
+  for(const c of cars){
+    if(c.isPlayer||!c.item||c.fall||c.air)continue;const held=raceT-c.itemAt;
+    if(c.item==='boost'&&(held>4||jumps.some(j=>c.idx>=j.rampStart-50&&c.idx<j.start)))useItem(c,false);
+    else if(c.item==='orb'&&(orbTarget(c,false)&&held>1.5||held>8))useItem(c,false);
+    else if(c.item==='slick'){const behind=cars.some(o=>o!==c&&Math.hypot(o.pos.x-c.pos.x,o.pos.z-c.pos.z)<20&&(o.pos.x-c.pos.x)*Math.sin(c.h)+(o.pos.z-c.pos.z)*Math.cos(c.h)<0);if(behind||held>7)useItem(c,true);}
+  }
+}
+function updateItemHud(){
+  const it=player&&player.item;$('hItem').textContent=it?ITEMS[it].icon:'—';
+  document.querySelectorAll('.tb.item').forEach(b=>b.classList.toggle('ready',!!it));
+}
+
 function respawnAfterFall(c){
   const i=(c.fall.jump.end+4)%N;c.fall=null;c.air=null;c.idx=i;c.pos.set(P[i].x,0,P[i].z);c.h=headingAt(i);c.speed=0;c.steer=0;c.stuck=0;
   if(c.isPlayer)flash('Back on track!');
@@ -586,6 +723,7 @@ function buildTrack(id){
   })();
   scenery(map);
   placeHazards(map);
+  placeItemBoxes();
 
   /* coins & nitro canisters */
   if(!coinGeo){coinGeo=new THREE.CylinderGeometry(1.1,1.1,.28,20);coinGeo.rotateX(Math.PI/2);}   // once only: rotating again each course turned coins sideways
@@ -594,7 +732,7 @@ function buildTrack(id){
   for(let i=35;i<N-10;i+=22){const lat=Math.sin(i*.045)*W*.3;const m=new THREE.Mesh(coinGeo,coinMat);m.position.set(P[i].x+NR[i].x*lat,1.7,P[i].z+NR[i].z*lat);m.castShadow=true;track.add(m);coins.push({m,taken:false});}
   canMat=canMat||M('#29c8ff',{emissive:'#0a6f99',emissiveIntensity:.6,metalness:.4,roughness:.3});
   cans.length=0;
-  for(const i of [.12,.26,.41,.56,.7,.86].map(f=>Math.floor(f*N))){const lat=((i/10)%2?1:-1)*W*.22;const g=new THREE.Group();const b=new THREE.Mesh(new THREE.CylinderGeometry(.75,.75,2,14),canMat);const cap=new THREE.Mesh(new THREE.CylinderGeometry(.4,.4,.5,10),M('#e9edf3',{metalness:.6}));cap.position.y=1.2;g.add(b,cap);g.position.set(P[i].x+NR[i].x*lat,1.6,P[i].z+NR[i].z*lat);g.rotation.z=.4;track.add(g);cans.push({m:g,t:0});}
+  for(const i of [.12,.26,.41,.56,.7,.86].map(f=>Math.floor(f*N)).concat(jumps.map(j=>j.rampStart-90))){const lat=((i/10)%2?1:-1)*W*.22;const g=new THREE.Group();const b=new THREE.Mesh(new THREE.CylinderGeometry(.75,.75,2,14),canMat);const cap=new THREE.Mesh(new THREE.CylinderGeometry(.4,.4,.5,10),M('#e9edf3',{metalness:.6}));cap.position.y=1.2;g.add(b,cap);g.position.set(P[i].x+NR[i].x*lat,1.6,P[i].z+NR[i].z*lat);g.rotation.z=.4;track.add(g);cans.push({m:g,t:0});}
 
   if(typeof fitMini==='function')fitMini();
 }
@@ -753,6 +891,9 @@ const online={
   },
   receive(msg){
     if(!msg)return;
+    if(msg.t==='slick'&&Number.isFinite(msg.x)&&Number.isFinite(msg.z)&&slicks.length<60){const m=new THREE.Mesh(slickGeo,slickMat);m.rotation.x=-Math.PI/2;m.position.set(msg.x,.12,msg.z);track.add(m);slicks.push({m,x:msg.x,z:msg.z,owner:null,born:raceT,id:String(msg.id)});return;}
+    if(msg.t==='slickGone'){const k=slicks.findIndex(sl=>sl.id===String(msg.id));if(k>=0){track.remove(slicks[k].m);slicks.splice(k,1);}return;}
+    if(msg.t==='hit'&&msg.s===this.lobby.seat&&player){spinOut(player,1.8);return;}
     if(msg.t==='go'&&Array.isArray(msg.racers)){if(msg.racers.includes(this.lobby.seat)){raceClass=CLASSES.find(k=>k.id===msg.cls)||CLASSES[1];if(MAPS.some(m=>m.id===msg.map)&&msg.map!==currentMap.id)buildTrack(msg.map);fillClasses();this.begin(msg.racers);}}
     else if(msg.t==='pos'&&Number.isInteger(msg.s)&&Number.isFinite(msg.x)&&Number.isFinite(msg.z)&&Number.isFinite(msg.h)){
       let ghost=this.ghosts.get(msg.s);
@@ -860,14 +1001,14 @@ function setupGrid(){
   const order=online.on?Array.from({length:6},(_,k)=>k===online.lobby.seat?'me':'skip'):['ai','ai','ai','ai','ai','me'];let ai=0;   // you start at the back
   order.forEach((who,k)=>{
     if(who==='skip')return;
-    const row=Math.floor(k/2),col=k%2;const idx=N-12-row*13;const lat=col?-5:5;
+    const row=Math.floor(k/2),col=k%2;const idx=N-12-row*16;const lat=col?-7:7;   // 3 rows of 2, well spaced
     let c;if(who==='me'){c=makeCar(playerCfg(),'You',true,1,(CAT.paint.find(p=>p.id===save.eq.paint)||{}).c);player=c;}
     else{const a=AIS[ai++];c=makeCar({paint:a.paint,body:a.body,spoiler:a.spoiler,rim:'silver',decal:a.decal,number:ai*11},a.name,false,a.skill,a.paint);c.stats.top*=1;}
     c.idx=idx;c.pos.set(P[idx].x+NR[idx].x*lat,0,P[idx].z+NR[idx].z*lat);c.h=headingAt(idx);c.lane=lat;c.laneGoal=lat;c.laneT=2+Math.random()*2;
     c.prog=idx-N;syncMesh(c);cars.push(c);
   });
 }
-function syncMesh(c){c.mesh.position.copy(c.pos);c.mesh.rotation.y=c.h;}
+function syncMesh(c){c.mesh.position.copy(c.pos);c.mesh.rotation.y=c.h+(c.spin||0);}
 
 /* ---------------- input ---------------- */
 const keys={gas:false,brake:false,left:false,right:false,nitro:false};const tkeys={gas:false,brake:false,left:false,right:false,nitro:false};
@@ -882,8 +1023,11 @@ addEventListener('keydown',e=>{
   if(KMAP[e.code]||e.key==='Shift'){if(state==='race'||state==='countdown')e.preventDefault();}
   if((e.code==='KeyP'||e.code==='Escape')&&!e.repeat){if(state==='race'||state==='countdown')pauseGame();else if(state==='paused')resumeGame();}
   if(e.code==='KeyR'&&state==='race'&&player&&!player.finished)resetCar(player);
+  // Space or E uses your item: forward, or behind you while holding S / ↓.
+  if((e.code==='Space'||e.code==='KeyE')&&!e.repeat&&state==='race'&&player&&!player.finished){e.preventDefault();useItem(player,!!keys.brake);}
+  if(e.code==='KeyC')lookBack=true;
 });
-addEventListener('keyup',e=>{if(KMAP[e.code])keys[KMAP[e.code]]=false;syncNitro(e);});
+addEventListener('keyup',e=>{if(KMAP[e.code])keys[KMAP[e.code]]=false;if(e.code==='KeyC')lookBack=false;syncNitro(e);});
 ['pointerdown','pointermove'].forEach(t=>addEventListener(t,e=>{if(keys.shift&&!e.shiftKey){keys.shift=false;keys.nitro=!!keys.nitroKey;}}));
 // Lets go of everything, so a press can't stay stuck when the game loses focus.
 function releaseKeys(){for(const k in keys)keys[k]=tkeys[k]=false;document.querySelectorAll('#touch .tb.on').forEach(b=>b.classList.remove('on'));}
@@ -893,6 +1037,13 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden&&!online.on)pauseGame();    // online races wait for you instead
 });
 $('tPause').onclick=()=>pauseGame();
+// Look back: a quick tap flips the view until you tap again; holding only looks back while held.
+let lookPress=0,lookBefore=false;
+const showLook=()=>$('tLook').classList.toggle('on',lookBack);
+$('tLook').addEventListener('pointerdown',e=>{e.preventDefault();lookPress=performance.now();lookBefore=lookBack;lookBack=true;showLook();try{$('tLook').setPointerCapture(e.pointerId);}catch(_){}});
+['pointerup','pointercancel'].forEach(t=>$('tLook').addEventListener(t,()=>{if(!lookPress)return;const held=performance.now()-lookPress>300;lookPress=0;lookBack=held?lookBefore:!lookBefore;showLook();}));
+const itemButton=(id,back)=>$(id).addEventListener('pointerdown',e=>{e.preventDefault();if(state==='race'&&player&&!player.finished)useItem(player,back);});
+itemButton('tThrow',false);itemButton('tBack',true);
 $('tReset').onclick=()=>{if(state==='race'&&player&&!player.finished)resetCar(player);};
 document.querySelectorAll('#touch .tb').forEach(b=>{const k=b.dataset.k;
   const on=e=>{e.preventDefault();tkeys[k]=true;b.classList.add('on');initAudio();};const off=e=>{e.preventDefault();tkeys[k]=false;b.classList.remove('on');};
@@ -945,18 +1096,29 @@ function stepCar(c,inp,dt){
     if(raceT>=c.fall.until)respawnAfterFall(c);
     return;
   }
-  const s=c.stats;let top=s.top*c.rb;
-  const hz=c.air?null:hazardAt(c),kind=hz&&HAZARDS[hz.type];
-  if(kind&&c.lastHazard!==hz){                                      // the moment you touch it
+  if(c.air){
+    c.pos.x+=Math.sin(c.h)*c.speed*dt;c.pos.z+=Math.cos(c.h)*c.speed*dt;
+    trackUpdate(c);jumpStep(c,dt);syncMesh(c);
+    for(const fl of c.mesh.userData.flames)fl.visible=false;
+    return;
+  }
+  const s=c.stats;let top=s.top*c.rb*(c.perkSpeed||1);
+  const hz=hazardAt(c),kind=hz&&HAZARDS[hz.type];
+  if(kind&&c.lastHazard!==hz&&!(c.perkSpeed>1)){                        // the moment you touch it (super speed ignores hazards)
     if(kind.hit)c.speed*=kind.hit;
     if(kind.stall)c.stallUntil=raceT+kind.stall;
+    if(kind.slowFor)c.slowUntil=raceT+kind.slowFor;
+    if(kind.stuck)c.stuckUntil=raceT+kind.stuck;
     if(c.isPlayer){flash(kind.say);beep(140,.18,'sawtooth',.1);}
   }
   c.lastHazard=hz;
   if(c.stallUntil>raceT)inp={...inp,gas:false,nitro:false};          // shocked: no engine for a moment
-  if(c.air)inp={...inp,steer:0,brake:false};                        // no steering in mid-air
-  if(kind&&kind.slow)top*=kind.slow;
-  const grip=kind&&kind.grip?kind.grip:1;
+  if(c.spinUntil>raceT){inp={gas:false,brake:false,steer:0,nitro:false};c.spin=(c.spin||0)+14*dt;} else c.spin=0;   // hit by a slick or orb
+  if(c.itemBoost>raceT)inp={...inp,gas:true,nitro:true};
+  if(c.stuckUntil>raceT){c.speed=0;inp={gas:false,brake:false,steer:0,nitro:false};}   // quicksand: held still
+  if(c.slowUntil>raceT)top*=HAZARDS.mud.slow;                        // mud: slowed for a while, steering still works
+  if(kind&&kind.slow&&!(c.perkSpeed>1))top*=kind.slow;
+  const grip=kind&&kind.grip&&!(c.perkSpeed>1)?kind.grip:1;
   // An empty tank stays empty until you let go and it refills a little, so holding nitro can't keep
   // nudging out tiny boosts. It only refills while you're not pressing nitro.
   if(c.nitroEmpty&&!inp.nitro&&c.nitro>=NITRO_RESTART)c.nitroEmpty=false;
@@ -965,19 +1127,19 @@ function stepCar(c,inp,dt){
   c.boosting=boost;
   if(boost){c.nitro=Math.max(0,c.nitro-s.drain*dt);top*=1.32;if(c.nitro===0)c.nitroEmpty=true;}
   else if(!inp.nitro)c.nitro=Math.min(1,c.nitro+s.refill*dt);
-  if(c.offroad)top*=.5;
-  if(inp.gas){if(c.speed<top)c.speed+=s.acc*(boost?1.9:1)*Math.max(.25,1-.6*Math.max(0,c.speed)/top)*dt;}
+  if(c.offroad&&!(c.perkSpeed>1))top*=.5;
+  if(inp.gas){if(c.speed<top)c.speed+=s.acc*(c.perkSpeed||1)*(boost?1.9:1)*Math.max(.25,1-.6*Math.max(0,c.speed)/top)*dt;}
   else if(inp.brake){if(c.speed>.5)c.speed-=55*dt;else c.speed=Math.max(-14,c.speed-18*dt);}
   else{const d=(5+Math.abs(c.speed)*.22)*dt;c.speed=Math.abs(c.speed)<=d?0:c.speed-Math.sign(c.speed)*d;}
   if(c.speed>top)c.speed=Math.max(top,c.speed-(c.offroad?45:20)*dt);
   c.steer+=(inp.steer-c.steer)*Math.min(1,dt*8*grip);
   const av=Math.abs(c.speed);const turn=2.15*s.hand*grip*(1-.4*Math.min(1,av/s.top));
-  if(grip<1)c.h+=Math.sin(raceT*5+c.idx)*1.4*dt*clamp(av/20,0,1);   // on ice the car slides about
+  if(grip<1)c.h+=Math.sin(raceT*4+c.idx)*2.4*dt*clamp(av/20,0,1);   // on ice the car slides about
   c.h+=c.steer*turn*dt*clamp(av/10,0,1)*Math.sign(c.speed||1);
   c.pos.x+=Math.sin(c.h)*c.speed*dt;c.pos.z+=Math.cos(c.h)*c.speed*dt;
   if(c.wallT>0)c.wallT-=dt;
   trackUpdate(c);
-  jumpStep(c);
+  jumpStep(c,dt);
   // visuals
   const u=c.mesh.userData;syncMesh(c);
   for(const w of u.wheels)w.rotation.x+=c.speed*dt/.44;
@@ -993,9 +1155,11 @@ function aiInput(c,dt){
   const d=wrapA(Math.atan2(tx-c.pos.x,tz-c.pos.z)-c.h);
   let kmax=0;for(let j=5;j<=75;j+=7)kmax=Math.max(kmax,K[(c.idx+j)%N]);
   if(!c.isPlayer){const diff=c.prog-(player?player.prog:0);c.rb=clamp(1-diff*.00045,raceClass.holdBack,raceClass.catchUp)*c.skill;}else c.rb=1;
-  const target=c.stats.top*c.rb*(1-Math.min(.5,kmax*raceClass.corners));
+  const target=c.stats.top*c.rb*(1-Math.min(.5,kmax*raceClass.corners))*(c.aiBoost>0?1.35:1);   // on nitro, keep the foot down
+  const runUp=jumps.find(j=>c.idx>=j.rampStart-90&&c.idx<j.start);
   if(c.aiBoost>0)c.aiBoost-=dt;
-  else if(kmax<.14&&c.nitro>.35&&Math.random()<dt*raceClass.nitro)c.aiBoost=1+Math.random();
+  else if(runUp&&c.nitro>.2&&!c.nitroEmpty)c.aiBoost=3.2;                       // nitro for the jump
+  else if(!runUp&&kmax<.14&&c.nitro>.65&&Math.random()<dt*raceClass.nitro)c.aiBoost=1+Math.random();   // keeps some back for jumps
   // stuck
   if(Math.abs(c.speed)<3&&state!=='countdown'&&!c.fall&&!c.air){c.stuck+=dt;if(c.stuck>2.2)resetCar(c);}else c.stuck=0;
   return{gas:c.speed<target,brake:c.speed>target+4,steer:clamp(d*3,-1,1),nitro:c.aiBoost>0};
@@ -1016,7 +1180,8 @@ function show(id){for(const s of screens)$(s).hidden=s!==id;}
 function flash(txt){const f=$('flash');f.textContent=txt;f.style.opacity=1;clearTimeout(flash.t);flash.t=setTimeout(()=>f.style.opacity=0,1300);}
 function soloRace(){online.leave();startRace();}
 function startRace(){
-  initAudio();setupGrid();frozenUntil=0;nitroTold=0;
+  initAudio();setupGrid();applyPerks();frozenUntil=0;nitroTold=0;lookBack=false;$('tLook').classList.remove('on');
+  for(const b of itemBoxes){b.back=0;b.m.visible=true;}for(const x of slicks.concat(orbs))track.remove(x.m);slicks.length=orbs.length=0;updateItemHud();
   for(const k of coins){k.taken=false;k.m.visible=true;}for(const k of cans){k.t=0;k.m.visible=true;}
   raceT=0;cdT=3.6;cdShown=-1;coinsPicked=0;hist=[];raceHist=[];histT=0;raceHistT=0;
   show(null);$('hud').hidden=false;$('touch').hidden=!isTouch;$('countdown').hidden=false;
@@ -1102,10 +1267,12 @@ function rankCars(){return[...cars].sort((a,b)=>{const fa=finishOrder.indexOf(a)
 /* ---------------- camera ---------------- */
 const camPos=new V3(),camLook=new V3();
 function snapCam(){if(!player)return;camPos.set(player.pos.x-Math.sin(player.h)*12,5.5,player.pos.z-Math.cos(player.h)*12);camera.position.copy(camPos);camera.lookAt(player.pos.x,1.5,player.pos.z);}
+let lookBack=false;   // C key, or the 👀 button: the camera looks behind the car
 function followCam(dt){
-  const fx=Math.sin(player.h),fz=Math.cos(player.h);const back=player.speed<-2?-10:12;
+  const fx=Math.sin(player.h)*(lookBack?-1:1),fz=Math.cos(player.h)*(lookBack?-1:1);const back=player.speed<-2&&!lookBack?-10:12;
   const tx=player.pos.x-fx*back,tz=player.pos.z-fz*back;const k=Math.min(1,dt*5);
-  camPos.x+=(tx-camPos.x)*k;camPos.z+=(tz-camPos.z)*k;camPos.y+=(5.5-camPos.y)*k;camera.position.copy(camPos);
+  const snap=lookBack!==followCam.was?1:k;followCam.was=lookBack;   // flip straight round, no slow swing
+  camPos.x+=(tx-camPos.x)*snap;camPos.z+=(tz-camPos.z)*snap;camPos.y+=(5.5-camPos.y)*k;camera.position.copy(camPos);
   camLook.set(player.pos.x+fx*6,1.5,player.pos.z+fz*6);camera.lookAt(camLook);
   const fov=player.boosting?82:70;camera.fov+=(fov-camera.fov)*Math.min(1,dt*4);camera.updateProjectionMatrix();
   sun.position.set(player.pos.x+40,90,player.pos.z+30);sun.target.position.set(player.pos.x,0,player.pos.z);
@@ -1169,6 +1336,7 @@ function update(dt){
   if(state!=='countdown')raceT+=dt;
   for(const c of cars){const inp=(c.isPlayer&&!c.finished)?playerInput():aiInput(c,dt);if(state==='countdown'){inp.gas=inp.brake=inp.nitro=false;c.speed=0;}stepCar(c,inp,dt);}
   collide();
+  if(state==='race')itemsStep(dt);
   // pickups
   if(!player.finished)for(const k of coins){if(k.taken)continue;const dx=k.m.position.x-player.pos.x,dz=k.m.position.z-player.pos.z;if(dx*dx+dz*dz<9){k.taken=true;k.m.visible=false;coinsPicked++;save.coins++;beep(1320,.08,'square',.08);setTimeout(()=>beep(1760,.1,'square',.07),60);}}
   for(const k of cans){if(k.t>0){k.t-=dt;if(k.t<=0)k.m.visible=true;continue;}for(const c of cars){const dx=k.m.position.x-c.pos.x,dz=k.m.position.z-c.pos.z;if(dx*dx+dz*dz<10){c.nitro=Math.min(1,c.nitro+.4);c.nitroEmpty=false;k.t=10;k.m.visible=false;if(c.isPlayer){flash('+ Nitro');beep(500,.25,'sine',.15,1500);}break;}}}
@@ -1202,7 +1370,7 @@ function loop(now){
   if(state==='race'||state==='finishing')drawGraph();
   renderer.render(scene,camera);
 }
-fillClasses();refreshMenu();setupGrid();camera.fov=60;camera.updateProjectionMatrix();
+fillClasses();refreshMenu();setupGrid();camera.fov=60;NebulaProfile.ready.then(checkPerks);camera.updateProjectionMatrix();
 requestAnimationFrame(loop);
 online.tryResume();
 const saveRace=()=>{if(online.lobby)online.lobby.remember(online.snapshot());};

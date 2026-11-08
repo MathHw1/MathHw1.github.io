@@ -24,6 +24,8 @@
     .who small { display:block; color:var(--muted); }
     #message { color:#fbbf24; }
     .hidden { display:none; }
+    .hint { margin:0 0 6px; color:var(--muted); font-size:13px; }
+    button.on { background:#7c3aed; border-color:#7c3aed; }
   </style>
 </head>
 <body>
@@ -38,9 +40,10 @@
   </section>
   <div id="panel" class="hidden">
     <p><button id="refresh">Refresh</button> <button id="signOut">Forget this device</button></p>
+    <section><h2>Players seen lately</h2><p class="hint">From online lobbies and leaderboards since the server last started.</p><div id="players"></div></section>
     <div id="boards"></div>
     <section><h2>Banned devices</h2><div id="banned"></div></section>
-    <p>Boards and bans reset whenever the free server restarts or sleeps.</p>
+    <p>Boards, bans and perks reset whenever the free server restarts or sleeps.</p>
   </div>
 </main>
 <script src="games/shared/lobby-client.js"></script>
@@ -82,10 +85,38 @@
   }
   const act = (path, body) => call(path, body).then(draw).catch(problem => { $('message').textContent = problem.message; });
 
+  const ago = at => { const m = Math.round((Date.now() - at) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
+
+  // Players and their extras. Perks reach the game within about 20 seconds.
+  function drawPlayers(players) {
+    const box = $('players');
+    box.textContent = players.length ? '' : 'Nobody yet.';
+    for (const p of players) {
+      const row = document.createElement('div'), who = document.createElement('div'), id = document.createElement('small');
+      row.className = 'row';
+      who.className = 'who';
+      who.textContent = p.name + ' · ' + p.game + ' · ' + ago(p.at) + (p.banned ? ' · BANNED' : '');
+      id.textContent = p.deviceId;
+      who.appendChild(id);
+      const coins = button(p.perks.coins ? '💰 Infinite coins: on' : '💰 Infinite coins: off', () => act('perk', { deviceId: p.deviceId, coins: !p.perks.coins, speed: p.perks.speed }));
+      if (p.perks.coins) coins.className = 'on';
+      row.append(who, coins);
+      for (const n of [1, 2, 3]) {
+        const b = button('⚡ ' + n + '×', () => act('perk', { deviceId: p.deviceId, coins: p.perks.coins, speed: n }));
+        if (p.perks.speed === n) b.className = 'on';
+        row.appendChild(b);
+      }
+      row.appendChild(p.banned ? button('Unban', () => act('unban', { deviceId: p.deviceId }))
+        : button('Ban device', () => { if (confirm('Ban ' + p.name + '? They’re removed from any lobby right away and can’t post scores or join online games.')) act('ban', { deviceId: p.deviceId }); }, true));
+      box.appendChild(row);
+    }
+  }
+
   function draw(view) {
     $('login').classList.add('hidden');
     $('panel').classList.remove('hidden');
     $('message').textContent = '';
+    drawPlayers(view.players || []);
     const boards = $('boards');
     boards.textContent = '';
     for (const [board, entries] of Object.entries(view.boards)) {
@@ -102,7 +133,7 @@
         row.append(who,
           button('Rename', () => showTouchKeyboard({ title: 'New username for ' + entry.name, maxLength: 12, onDone: name => act('rename', { deviceId: entry.deviceId, name }) })),
           button('Wipe score', () => act('wipe', { deviceId: entry.deviceId, board }), true),
-          button('Ban device', () => { if (confirm('Ban this device and wipe its scores?')) act('ban', { deviceId: entry.deviceId }); }, true));
+          button('Ban device', () => { if (confirm('Ban this device? It loses its scores and is removed from any lobby right away.')) act('ban', { deviceId: entry.deviceId }); }, true));
         section.appendChild(row);
       }
       boards.appendChild(section);

@@ -3,6 +3,19 @@
 // The player's profile for the whole arcade: a private device ID, their username and their stats.
 // It lives in localStorage with a copy in IndexedDB, which brings it back if iPad Safari clears one.
 
+// Leaving the game (switching tabs or apps, or minimising) goes straight to the study homepage.
+// Inside the arcade the arcade page does the moving, so this only tells it; on its own, the page goes itself.
+// Focus moving between the arcade and a game frame doesn't count, which is why it checks hasFocus.
+(function () {
+    const home = new URL('../../', document.currentScript.src).href;
+    const leave = () => {
+        if (window.top !== window) { try { window.parent.postMessage({ nebula: 'away' }, '*'); } catch (_) {} return; }
+        location.replace(home);
+    };
+    document.addEventListener('visibilitychange', () => { if (document.hidden) leave(); });
+    addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) leave(); }, 150));
+})();
+
 const NebulaProfile = (function () {
     const KEY = 'nebula-profile';
     const OLD_NAME_KEY = 'nebula-player-name';

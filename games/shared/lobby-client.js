@@ -33,6 +33,7 @@ const LOBBY_ERRORS = {
     'not-found': code => 'No lobby with code ' + code + '. Check the code and try again.',
     'full': () => 'That lobby is already full.',
     'kicked': () => 'The host removed you from that lobby.',
+    'banned': () => 'This device can’t join online games.',
     'server-full': () => 'The lobby server is full right now. Try again soon.'
 };
 
@@ -152,6 +153,7 @@ class NebulaLobby {
         socket.on('player-away', () => this.on.onOpponentAway());
         socket.on('player-left', () => this.on.onOpponentLeft());
         socket.on('roster', room => this.setRoster(room));
+        socket.on('banned', () => dispatchEvent(new Event('nebula-banned')));
         socket.on('kicked', () => {
             this.leave();
             if (this.on.onKicked) this.on.onKicked();
@@ -184,6 +186,7 @@ class NebulaLobby {
             clearTimeout(this.slowTimer);
             clearTimeout(this.giveUpTimer);
 
+            if (reply.error === 'banned') dispatchEvent(new Event('nebula-banned'));
             if (reply.error === 'seat-in-use') {
                 this.resumable = false;       // that seat is another tab's, so leave its saved copy alone
                 this.leave();
