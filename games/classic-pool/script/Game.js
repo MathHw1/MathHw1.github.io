@@ -87,13 +87,7 @@ Game_Singleton.prototype.startNewGame = function(){
     Game.policy = new GamePolicy();
 
     Canvas2D.clear();
-    Canvas2D.drawImage(
-        sprites.controls, 
-        new Vector2(Game.size.x/2,Game.size.y/2), 
-        0, 
-        1, 
-        new Vector2(sprites.controls.width/2,sprites.controls.height/2)
-    );
+    drawControlsCard();
 
     setTimeout(()=>{
         AI.init(Game.gameWorld, Game.policy);
