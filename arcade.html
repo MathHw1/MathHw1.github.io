@@ -463,8 +463,12 @@ function renderNav() {
   // A four- or five-finger swipe or pinch is the iPad's app-switch gesture: switch before it finishes.
   addEventListener('touchstart', e => { if (e.touches.length >= 4) toStudy(); }, { capture: true, passive: true });
   // Safari's own pinch events: only a clear squeeze inward counts, so two thumbs on game buttons never do.
-  const PINCH_IN = 0.8;
-  addEventListener('gesturechange', e => { if (e.scale < PINCH_IN) toStudy(); });
+  // A pinch only counts when it's a fast, clear squeeze inward (30% closer within 450 ms).
+  const PINCH_IN = 0.7, PINCH_MS = 450;
+  let pinch = null;
+  addEventListener('gesturestart', () => { pinch = performance.now(); });
+  addEventListener('gesturechange', e => { if (pinch && e.scale < PINCH_IN && performance.now() - pinch < PINCH_MS) toStudy(); });
+  addEventListener('gestureend', () => { pinch = null; });
   // Back on the tab without study mode on (the player only tapped something here): tell the game to redraw.
   const showGame = () => { if (!panicked) { try { $('frame').contentWindow.postMessage({ nebula: 'stay' }, location.origin); } catch (_) {} } };
   addEventListener('focus', showGame);

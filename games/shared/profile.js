@@ -61,7 +61,10 @@
         const cover = document.getElementById('study-mode-mask');
         if (cover) cover.remove();
         document.documentElement.style.visibility = '';
-        dispatchEvent(new Event('resize'));          // the games redraw everything on resize
+        // Paint a frame straight away rather than waiting for the game loop, so the canvas never sits blank.
+        dispatchEvent(new Event('resize'));
+        dispatchEvent(new Event('nebula-redraw'));
+        requestAnimationFrame(() => dispatchEvent(new Event('nebula-redraw')));
     }
 
     document.addEventListener('visibilitychange', () => {
@@ -75,8 +78,18 @@
     addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.nebula === 'stay') unmask(); });
     // A four- or five-finger swipe or pinch is the iPad's app-switch gesture; normal play never uses that many.
     const MANY_FINGERS = 4;
+    const PINCH_IN = 0.7;           // the fingers end up at least 30% closer together
+    const PINCH_MS = 450;           // ...within this long of the pinch starting
     addEventListener('touchstart', e => { if (e.touches.length >= MANY_FINGERS) mask(); }, { capture: true, passive: true });
-    addEventListener('gesturechange', e => { if (e.scale < 0.8) mask(); });       // Safari's pinch: only a clear squeeze inward
+    // Safari's pinch: only a fast, clear squeeze inward that didn't start on the game's own buttons,
+    // so two thumbs working Tiny Turbo's controls never count.
+    let pinch = null;
+    addEventListener('gesturestart', e => {
+        const onControls = e.target && e.target.closest && e.target.closest('button, .tb, [data-control], #touch, .touch');
+        pinch = onControls ? null : performance.now();
+    });
+    addEventListener('gesturechange', e => { if (pinch && e.scale < PINCH_IN && performance.now() - pinch < PINCH_MS) mask(); });
+    addEventListener('gestureend', () => { pinch = null; });
     addEventListener('touchend', e => { if (masked && e.touches.length === 0) setTimeout(() => { if (document.hasFocus() && !document.hidden) unmask(); }, 300); }, { capture: true, passive: true });
     addEventListener('blur', () => {
         mask();

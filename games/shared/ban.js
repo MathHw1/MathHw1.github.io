@@ -54,12 +54,16 @@ const NebulaBan = (function () {
                 .then(reply => reply.ok ? reply.json() : null)
                 .then(status => {
                     if (!status) return;
+                    // Every game on the page hears the owner's perks (infinite coins, super speed) from here.
+                    perks = { coins: !!status.coins, speed: status.speed > 1 ? status.speed : 1 };
+                    dispatchEvent(new CustomEvent('nebula-perks', { detail: perks }));
                     if (status.banned) show();
                     else if (!wasBanned || status.unbanned) hide();
                 });
         }).catch(() => {});
     }
 
+    let perks = { coins: false, speed: 1 };
     let early = inCookie();
     try { early = early || localStorage.getItem(KEY) === 'yes'; } catch (_) {}
     if (early) {
@@ -69,5 +73,5 @@ const NebulaBan = (function () {
     document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
     check();
     setInterval(check, CHECK_EVERY_MS);
-    return { show, hide, check };
+    return { show, hide, check, perks: () => perks };
 })();

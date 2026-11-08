@@ -26,6 +26,8 @@
     .hidden { display:none; }
     .hint { margin:0 0 6px; color:var(--muted); font-size:13px; }
     button.on { background:#7c3aed; border-color:#7c3aed; }
+    /* Finger-sized on an iPad or phone. */
+    @media (pointer: coarse) { button { min-height:44px; padding:10px 14px; font-size:15px; } .row { gap:8px; padding:9px 0; } }
   </style>
 </head>
 <body>
@@ -35,8 +37,10 @@
   <p id="message"></p>
   <section id="login">
     <h2>Password</h2>
-    <input id="password" type="password" autocomplete="off">
-    <p><button id="signIn">Open</button></p>
+    <form id="loginForm">
+      <input id="password" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+      <p><button id="signIn">Open</button></p>
+    </form>
   </section>
   <div id="panel" class="hidden">
     <p><button id="refresh">Refresh</button> <button id="signOut">Forget this device</button></p>
@@ -155,7 +159,8 @@
       if (problem.message !== 'denied') $('message').textContent = 'Couldn’t reach the server. It may be waking up, so try again in a minute.';
     });
   }
-  $('signIn').addEventListener('click', () => { password = $('password').value; $('password').value = ''; open(); });
+  // A form, so the iPad keyboard's Go key unlocks it as well as the Open button.
+  $('loginForm').addEventListener('submit', e => { e.preventDefault(); password = $('password').value; $('password').value = ''; $('password').blur(); open(); });
   $('refresh').addEventListener('click', open);
   $('signOut').addEventListener('click', () => signedOut(''));
   if (password) open();

@@ -103,7 +103,13 @@ function load() {
     return fresh;
 }
 const save = load();
+// The owner's infinite coins perk: the wallet is kept full, so every price check passes and buying
+// never runs it down.
+const INFINITE_CASH = 999999;
+let infiniteCash = false;
+function topUp() { if (infiniteCash && save.cash < INFINITE_CASH) save.cash = INFINITE_CASH; }
 function store() {
+    topUp();
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (_) {}
     NebulaProfile.setStats('wheelie', { save });
 }
@@ -1274,6 +1280,11 @@ document.addEventListener('visibilitychange', () => {
     else if (race.on && screen === 'paused') show('riding');
 });
 addEventListener('resize', resize);
+addEventListener('nebula-redraw', render);
+addEventListener('nebula-perks', e => {
+    infiniteCash = e.detail.coins;
+    if (infiniteCash && save.cash < INFINITE_CASH) { store(); fillMenu(); if (screen === 'garage') fillGarage(); }
+});
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('selectstart', e => e.preventDefault());
 

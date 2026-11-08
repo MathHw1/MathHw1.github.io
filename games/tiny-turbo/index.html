@@ -548,10 +548,7 @@ function applyPerks(){
   if(perks.coins&&save.coins<999999){save.coins=999999;persist();refreshMenu();}
   if(player)player.perkSpeed=perks.speed>1?perks.speed:0;
 }
-function checkPerks(){
-  fetch(LOBBY_SERVER_URL+'/perks/'+NebulaProfile.deviceId()).then(r=>r.ok?r.json():null).then(p=>{if(p){perks=p;applyPerks();}}).catch(()=>{});
-}
-setInterval(checkPerks,20000);
+addEventListener('nebula-perks',e=>{perks=e.detail;applyPerks();});   // ban.js checks the server every 15 s
 
 function placeOf(c){const order=rankCars();return order.indexOf(c)+1;}
 function rollItem(c){
@@ -1371,6 +1368,7 @@ function resize(){
   gCam.updateProjectionMatrix();
 }
 addEventListener('resize',resize);resize();
+addEventListener('nebula-redraw',()=>{if(state==='garage')renderer.render(gScene,gCam);else renderer.render(scene,camera);});
 
 /* ---------------- main loop ---------------- */
 let last=performance.now();
@@ -1438,7 +1436,7 @@ NebulaShop.register({
     return{ok:true,message:(owned?'Now using ':'Bought ')+it.name+'!'+later};
   }
 });
-fillClasses();refreshMenu();setupGrid();camera.fov=60;NebulaProfile.ready.then(checkPerks);camera.updateProjectionMatrix();
+fillClasses();refreshMenu();setupGrid();camera.fov=60;camera.updateProjectionMatrix();
 requestAnimationFrame(loop);
 online.tryResume();
 const saveRace=()=>{if(online.lobby)online.lobby.remember(online.snapshot());};
