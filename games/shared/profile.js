@@ -3,11 +3,12 @@
 // The player's profile for the whole arcade: a private device ID, their username and their stats.
 // It lives in localStorage with a copy in IndexedDB, which brings it back if iPad Safari clears one.
 
-// Leaving the game (switching tabs or apps, or minimising) goes straight to the study homepage.
-// Inside the arcade the arcade page does the moving, so this only tells it; on its own, the page goes itself.
+// Leaving the game (switching tabs or apps, or minimising) goes straight to study mode, the arcade's 📝 notes.
+// Inside the arcade the arcade page switches, so this only tells it; on its own, the page goes to the arcade.
 // Focus moving between the arcade and a game frame doesn't count, which is why it checks hasFocus.
 (function () {
-    const home = new URL('../../', document.currentScript.src).href;
+    if (window.NEBULA_ARCADE) return;
+    const home = new URL('../../arcade.html#study', document.currentScript.src).href;
     // Following a link or closing the page hides it too, and that mustn't count as leaving.
     let navigating = false;
     addEventListener('beforeunload', () => { navigating = true; });
