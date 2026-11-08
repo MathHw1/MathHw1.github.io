@@ -29,10 +29,18 @@ const NebulaScores = (function () {
             { id: 'wheelie:miles', name: 'Total Miles', show: n => (n / 100).toFixed(2) + ' mi' },
             { id: 'wheelie:time', name: 'Fastest Mile', show: minutes, lower: true }
         ] },
-        { id: 'racing', name: '🏎️ Tiny Turbo', boards: [{ id: 'racing:time', name: 'Fastest Race', show: minutes, lower: true }] },
+        { id: 'racing', name: '🏎️ Tiny Turbo', boards: turboBoards() },
         { id: 'chess', name: '♟️ Chess', boards: [{ id: 'chess:elo', name: 'ELO Rating', show: n => n.toLocaleString() }] },
         { id: 'pool', name: '🎱 Pool', boards: [{ id: 'pool:wins', name: 'Online Wins', show: n => n + ' · ' + poolRank(n) }] }
     ];
+    // A board for every Tiny Turbo course and class. `group` puts the course on its own row of tabs.
+    function turboBoards() {
+        const courses = [['valley', 'Pine Valley'], ['dunes', 'Sunset Dunes'], ['frost', 'Frost Peak'], ['neon', 'Neon City']];
+        const valley = { 50: 'racing:time50', 100: 'racing:time', 150: 'racing:time150', 200: 'racing:time200' };
+        return courses.flatMap(([course, title]) => ['50', '100', '150', '200'].map(cls => ({
+            id: course === 'valley' ? valley[cls] : 'racing:' + course + cls, group: title, name: cls + 'cc', show: minutes, lower: true
+        })));
+    }
     const allBoards = GAMES.flatMap(game => game.boards);
     const boardInfo = id => allBoards.find(b => b.id === id);
 
@@ -129,14 +137,14 @@ const NebulaScores = (function () {
             row.className = 'sb-tabs';
             return row;
         };
-        const gameRow = tabs(), boardRow = tabs(), scopeRow = tabs();
+        const gameRow = tabs(), groupRow = tabs(), boardRow = tabs(), scopeRow = tabs();
         const list = document.createElement('ol');
         list.className = 'sb-list';
         const nameLine = document.createElement('p');
         nameLine.className = 'sb-name';
         box.textContent = '';
         if (games.length > 1) box.appendChild(gameRow);
-        box.append(boardRow, scopeRow, list, nameLine);
+        box.append(groupRow, boardRow, scopeRow, list, nameLine);
 
         function row(parent, label, on, pick) {
             const b = document.createElement('button');
@@ -165,9 +173,11 @@ const NebulaScores = (function () {
         }
         async function fill() {
             const mine = ++turn;
-            gameRow.textContent = boardRow.textContent = scopeRow.textContent = '';
+            gameRow.textContent = groupRow.textContent = boardRow.textContent = scopeRow.textContent = '';
             games.forEach(g => row(gameRow, g.name, g === game, () => { game = g; board = g.boards[0]; }));
-            game.boards.forEach(b => row(boardRow, b.name, b === board, () => { board = b; }));
+            const groups = [...new Set(game.boards.map(b => b.group).filter(Boolean))];
+            groups.forEach(group => row(groupRow, group, board.group === group, () => { board = game.boards.find(b => b.group === group); }));
+            game.boards.filter(b => b.group === board.group).forEach(b => row(boardRow, b.name, b === board, () => { board = b; }));
             row(scopeRow, 'Everyone', scope === 'everyone', () => { scope = 'everyone'; });
             row(scopeRow, 'This device', scope === 'mine', () => { scope = 'mine'; });
 
