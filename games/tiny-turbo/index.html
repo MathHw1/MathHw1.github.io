@@ -520,6 +520,7 @@ const ITEM_ZONES=[.2,.42,.64,.86],ITEM_RESPAWN=3,BOXES_PER_ZONE=6;
 const ITEMS={slick:{icon:'🛢️',name:'Slick'},orb:{icon:'🔮',name:'Homing orb'},boost:{icon:'⚡',name:'Boost'}};
 const ODDS=[{slick:.8,orb:.1,boost:.1},{slick:.45,orb:.35,boost:.2},{slick:.1,orb:.5,boost:.4}];   // 1st, 2nd–3rd, 4th–6th
 const itemBoxes=[],slicks=[],orbs=[];
+const SLICK_REACH=3.4;    // the puddle's size plus half a car, so driving over any part of it counts
 let boxMat=null,boxGeo=null,slickGeo=null,slickMat=null,orbGeo=null,orbMat=null;
 function placeItemBoxes(){
   itemBoxes.length=0;slicks.length=0;orbs.length=0;
@@ -583,8 +584,14 @@ function orbTarget(c,back){
       if(back?ahead<0:ahead>0){const d=dx*dx+dz*dz;if(d<bd){bd=d;best={ghost:seat};}}}
     return best;
   }
-  const order=rankCars(),i=order.indexOf(c),t=order[back?i+1:i-1];
-  return t&&!t.finished?{car:t}:null;
+  // The nearest car on the road ahead (or behind), not whoever is next in the standings.
+  let best=null,bd=N/3;
+  for(const o of cars){
+    if(o===c||o.finished||o.fall)continue;
+    const d=back?(c.idx-o.idx+N)%N:(o.idx-c.idx+N)%N;
+    if(d>0&&d<bd){bd=d;best=o;}
+  }
+  return best?{car:best}:null;
 }
 function itemsStep(dt){
   for(const b of itemBoxes){
@@ -597,7 +604,7 @@ function itemsStep(dt){
   for(let k=slicks.length-1;k>=0;k--){
     const sl=slicks[k];let gone=raceT-sl.born>45;
     for(const c of cars){if(gone)break;if(c.air||c.fall||(c===sl.owner&&raceT-sl.born<.8))continue;const dx=sl.x-c.pos.x,dz=sl.z-c.pos.z;
-      if(dx*dx+dz*dz<6){spinOut(c,1.3);gone=true;if(online.on&&c.isPlayer)online.lobby.send({t:'slickGone',id:sl.id});}}
+      if(dx*dx+dz*dz<SLICK_REACH*SLICK_REACH){spinOut(c,1.3);gone=true;if(online.on&&c.isPlayer)online.lobby.send({t:'slickGone',id:sl.id});}}
     if(gone){track.remove(sl.m);slicks.splice(k,1);}
   }
   for(let k=orbs.length-1;k>=0;k--){
@@ -625,14 +632,15 @@ function updateItemHud(){
   document.querySelectorAll('.tb.item').forEach(b=>b.classList.toggle('ready',!!it));
 }
 
-// Rivals watch the road ahead and steer round hazards and slicks in their lane. Each one
-// misjudges now and then (DODGE_SKILL), so they still get caught sometimes.
+// Rivals watch the road ahead and steer round course hazards in their lane. Each one misjudges
+// now and then (DODGE_SKILL). Slicks and orbs aren't dodged, so thrown items always count.
 const DODGE_SKILL=.88,DODGE_AHEAD=75,DODGE_ROOM=4;
+const RIVAL_HAZARD_CHANCE=.05;   // how often a course hazard actually slows a rival down
 const lateralOf=(i,x,z)=>(x-P[i].x)*NR[i].x+(z-P[i].z)*NR[i].z;
 function nearestPoint(x,z){let best=0,bd=1e12;for(let i=0;i<N;i+=2){const d=(P[i].x-x)**2+(P[i].z-z)**2;if(d<bd){bd=d;best=i;}}return best;}
 function dodge(c){
   let next=null,nd=1e9;
-  for(const o of hazards.concat(slicks)){
+  for(const o of hazards){
     const ahead=(o.i-c.idx+N)%N;if(ahead<4||ahead>DODGE_AHEAD)continue;
     if(Math.abs(o.lat-c.lane)>o.size+DODGE_ROOM-1)continue;   // not in this car's way
     if(ahead<nd){nd=ahead;next=o;}
@@ -1127,7 +1135,10 @@ function stepCar(c,inp,dt){
     return;
   }
   const s=c.stats;let top=s.top*c.rb*(c.perkSpeed||1);
-  const hz=hazardAt(c),kind=hz&&HAZARDS[hz.type];
+  let hz=hazardAt(c);
+  // Rivals only feel a course hazard now and then. Each patch is rolled once, when they first touch it.
+  if(hz&&!c.isPlayer){if(c.lastHazard!==hz)c.hazardBites=Math.random()<RIVAL_HAZARD_CHANCE;if(!c.hazardBites){c.lastHazard=hz;hz=null;}}
+  const kind=hz&&HAZARDS[hz.type];
   if(kind&&c.lastHazard!==hz&&!(c.perkSpeed>1)){                        // the moment you touch it (super speed ignores hazards)
     if(kind.hit)c.speed*=kind.hit;
     if(kind.stall)c.stallUntil=raceT+kind.stall;
@@ -1135,7 +1146,7 @@ function stepCar(c,inp,dt){
     if(kind.stuck)c.stuckUntil=raceT+kind.stuck;
     if(c.isPlayer){flash(kind.say);beep(140,.18,'sawtooth',.1);}
   }
-  c.lastHazard=hz;
+  if(hz||c.isPlayer||!hazardAt(c))c.lastHazard=hz;
   if(c.stallUntil>raceT)inp={...inp,gas:false,nitro:false};          // shocked: no engine for a moment
   if(c.spinUntil>raceT){inp={gas:false,brake:false,steer:0,nitro:false};c.spin=(c.spin||0)+14*dt;} else c.spin=0;   // hit by a slick or orb
   if(c.itemBoost>raceT)inp={...inp,gas:true,nitro:true};
