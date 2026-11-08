@@ -9,14 +9,18 @@ const NebulaBan = (function () {
     const CHECK_EVERY_MS = 15000;
     let screen = null;
 
-    // Remembered in localStorage and in the profile, which is also backed up to IndexedDB.
+    // Remembered in three places: localStorage, a long-lived cookie, and the profile (backed up to
+    // IndexedDB). Any one of them is enough, so clearing one doesn't lift the ban.
+    const COOKIE_DAYS = 400;
+    const inCookie = () => document.cookie.split('; ').includes(KEY + '=yes');
     function remembered() {
         let here = false;
         try { here = localStorage.getItem(KEY) === 'yes'; } catch (_) {}
-        return here || !!NebulaProfile.stats('device', {}).banned;
+        return here || inCookie() || !!NebulaProfile.stats('device', {}).banned;
     }
     function remember(banned) {
         try { banned ? localStorage.setItem(KEY, 'yes') : localStorage.removeItem(KEY); } catch (_) {}
+        document.cookie = KEY + '=' + (banned ? 'yes' : '') + '; path=/; SameSite=Lax; max-age=' + (banned ? COOKIE_DAYS * 86400 : 0);
         NebulaProfile.setStats('device', { banned });
     }
 
@@ -43,7 +47,10 @@ const NebulaBan = (function () {
         NebulaProfile.ready.then(() => {
             const wasBanned = remembered();
             if (wasBanned) show();
-            return fetch(LOBBY_SERVER_URL + '/perks/' + NebulaProfile.deviceId() + (wasBanned ? '?banned=1' : ''))
+            // The username goes along too, so a banned name is caught on a new device.
+            const ask = new URLSearchParams({ name: NebulaProfile.name() });
+            if (wasBanned) ask.set('banned', '1');
+            return fetch(LOBBY_SERVER_URL + '/perks/' + NebulaProfile.deviceId() + '?' + ask)
                 .then(reply => reply.ok ? reply.json() : null)
                 .then(status => {
                     if (!status) return;
@@ -53,8 +60,8 @@ const NebulaBan = (function () {
         }).catch(() => {});
     }
 
-    let early = false;
-    try { early = localStorage.getItem(KEY) === 'yes'; } catch (_) {}
+    let early = inCookie();
+    try { early = early || localStorage.getItem(KEY) === 'yes'; } catch (_) {}
     if (early) {
         if (document.body) show(); else addEventListener('DOMContentLoaded', show);
     }

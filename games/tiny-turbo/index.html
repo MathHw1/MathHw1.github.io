@@ -245,7 +245,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
 <div id="howto" class="screen scrim-full" hidden>
   <div class="card">
     <h2>How to Play</h2>
-    <p>Every course has a hazard: mud in Pine Valley, quicksand in Sunset Dunes, ice in Frost Peak and shock pads in Neon City. They're hard to spot, so watch the road. Sunset Dunes, Frost Peak and Neon City have cliff jumps that are too wide to clear without nitro. Fall in and you wait 3 seconds. Blue canisters before each jump refill your nitro. Use nitro in the first 3 seconds and you're frozen for 3.</p>
+    <p>Every course has a hazard: mud in Pine Valley, quicksand in Sunset Dunes, ice in Frost Peak (it locks your steering for 3 seconds) and shock pads in Neon City. They're hard to spot, so watch the road. Sunset Dunes, Frost Peak and Neon City have cliff jumps that are too wide to clear without nitro. Fall in and you wait 3 seconds. Blue canisters before each jump refill your nitro. Use nitro in the first 3 seconds and you're frozen for 3.</p>
     <p class="touch-only">Hold ◀ ▶ to steer and ▲ to drive. Hold NITRO to drive with a boost. ▼ brakes. Tap ↺ if you get stuck, or ⏸ to pause.</p>
     <div class="keys kbd-only">
       <span><kbd>W</kbd> <kbd>↑</kbd></span><span>Gas</span>
@@ -437,10 +437,11 @@ function scenery(map){
 const HAZARDS={
   mud:{say:'🟤 Mud! Slowed for 5s',colour:'#4a3826',opacity:.75,size:7,hit:.7,slowFor:5,slow:.42},
   sand:{say:'🏜️ Quicksand! Stuck for 5s',colour:'#b3925c',opacity:.7,size:7,stuck:5,slow:.35},
-  ice:{say:'🧊 Ice! No grip',colour:'#dcf3ff',opacity:.38,size:8,grip:.05},
+  ice:{say:'🧊 Ice! Steering locked for 3s',colour:'#dcf3ff',opacity:.38,size:8,lockSteer:3},
   shock:{say:'⚡ Shorted out!',colour:'#1f2a44',opacity:.85,size:6.5,hit:.5,stall:3,glow:'#22e3ff'}
 };
 //   hit: share of your speed left the moment you touch it.  slowFor: seconds you stay slowed, even after leaving.
+//   lockSteer: seconds the steering stays stuck the way it was when you hit it (ice).
 //   stuck: seconds held completely still.  slow: share of top speed while slowed.  grip: share of steering
 //   left (ice).  stall: seconds with no engine.  size: half-width in metres.
 // They're tinted close to the road on purpose, so you have to watch for them.
@@ -1144,6 +1145,7 @@ function stepCar(c,inp,dt){
     if(kind.stall)c.stallUntil=raceT+kind.stall;
     if(kind.slowFor)c.slowUntil=raceT+kind.slowFor;
     if(kind.stuck)c.stuckUntil=raceT+kind.stuck;
+    if(kind.lockSteer)c.steerLock={until:raceT+kind.lockSteer,steer:c.steer};
     if(c.isPlayer){flash(kind.say);beep(140,.18,'sawtooth',.1);}
   }
   if(hz||c.isPlayer||!hazardAt(c))c.lastHazard=hz;
@@ -1152,6 +1154,7 @@ function stepCar(c,inp,dt){
   if(c.itemBoost>raceT)inp={...inp,gas:true,nitro:true};
   if(c.stuckUntil>raceT){c.speed=0;inp={gas:false,brake:false,steer:0,nitro:false};}   // quicksand: held still
   if(c.slowUntil>raceT)top*=HAZARDS.mud.slow;                        // mud: slowed for a while, steering still works
+  if(c.steerLock&&raceT<c.steerLock.until)inp={...inp,steer:c.steerLock.steer};   // ice: you keep turning the way you were
   if(kind&&kind.slow&&!(c.perkSpeed>1))top*=kind.slow;
   const grip=kind&&kind.grip&&!(c.perkSpeed>1)?kind.grip:1;
   // An empty tank stays empty until you let go and it refills a little, so holding nitro can't keep
