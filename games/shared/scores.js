@@ -10,6 +10,14 @@ const NebulaScores = (function () {
     const TIMEOUT_MS = 12000;
     const NAME_PICKS = ['SPEEDY FOX', 'WHEELIE KING', 'TURBO TIGER', 'SHADOW RIDER', 'NEON WOLF', 'ROCKET ACE'];
 
+    // AbortSignal.timeout only exists from iPadOS 16, so older iPads build the same thing by hand.
+    function timeLimit() {
+        if (AbortSignal.timeout) return AbortSignal.timeout(TIMEOUT_MS);
+        const stop = new AbortController();
+        setTimeout(() => stop.abort(), TIMEOUT_MS);
+        return stop.signal;
+    }
+
     const minutes = ms => {
         const m = Math.floor(ms / 60000), s = (ms % 60000) / 1000;
         return m + ':' + s.toFixed(2).padStart(5, '0');
@@ -54,7 +62,7 @@ const NebulaScores = (function () {
 
     async function everyone(board) {
         const [game, category] = board.split(':');
-        const reply = await fetch(LOBBY_SERVER_URL + '/scores/' + game + '/' + category, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+        const reply = await fetch(LOBBY_SERVER_URL + '/scores/' + game + '/' + category, { signal: timeLimit() });
         if (!reply.ok) throw new Error('Leaderboard error ' + reply.status);
         return (await reply.json()).scores;
     }
@@ -65,7 +73,7 @@ const NebulaScores = (function () {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ board, name: NebulaProfile.name(), score: Math.round(value), deviceId: NebulaProfile.deviceId() }),
-            signal: AbortSignal.timeout(TIMEOUT_MS)
+            signal: timeLimit()
         });
         if (reply.status === 422) throw new Error('That username isn’t allowed. Pick a different one.');
         if (reply.status === 403) throw new Error('This device can’t post scores.');
