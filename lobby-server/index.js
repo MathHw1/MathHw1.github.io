@@ -49,6 +49,9 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';    // the admin tools s
 for (const course of ['dunes', 'frost', 'neon']) for (const cls of ['50', '100', '150', '200']) BOARDS['racing:' + course + cls] = { lower: true };
 const scores = new Map(Object.keys(BOARDS).map(board => [board, []]));   // entries: { deviceId, name, score }
 const bannedDevices = new Set();
+// Free hosts forget everything when they restart, so a banned device remembers its own ban and reports
+// it again (see /perks). Only an unban the owner gives since this server started can lift it.
+const unbannedDevices = new Set();
 // Devices seen lately, so the owner panel can list players. Kept in memory only, newest last.
 const seenDevices = new Map();     // deviceId -> { name, game, at }
 const MAX_SEEN = 500;
@@ -229,9 +232,12 @@ app.options('/scores', (req, res) => {
 });
 
 // Each page asks about its own device now and then: its extras, and whether it's banned.
+// ?banned=1 means the device remembers being banned, so the ban goes back on unless it was lifted.
 app.get('/perks/:deviceId', (req, res) => {
     allowSite(req, res);
-    res.json({ ...(perks.get(req.params.deviceId) || { coins: false, speed: 1 }), banned: bannedDevices.has(req.params.deviceId) });
+    const id = req.params.deviceId;
+    if (req.query.banned === '1' && DEVICE_PATTERN.test(id) && !unbannedDevices.has(id)) bannedDevices.add(id);
+    res.json({ ...(perks.get(id) || { coins: false, speed: 1 }), banned: bannedDevices.has(id), unbanned: unbannedDevices.has(id) });
 });
 
 app.get('/scores/:game/:category', (req, res) => {
@@ -322,6 +328,7 @@ app.post('/admin/:action', express.json({ limit: '1kb' }), (req, res) => {
     }
     else if (req.params.action === 'ban') {
         bannedDevices.add(deviceId);
+        unbannedDevices.delete(deviceId);
         for (const list of scores.values()) wipe(list);
         kickDevice(deviceId);
     }
@@ -330,7 +337,10 @@ app.post('/admin/:action', express.json({ limit: '1kb' }), (req, res) => {
         if (!coins && speed === 1) perks.delete(deviceId);
         else perks.set(deviceId, { coins, speed });
     }
-    else if (req.params.action === 'unban') bannedDevices.delete(deviceId);
+    else if (req.params.action === 'unban') {
+        bannedDevices.delete(deviceId);
+        unbannedDevices.add(deviceId);
+    }
     else return res.sendStatus(404);
     res.json(adminView());
 });

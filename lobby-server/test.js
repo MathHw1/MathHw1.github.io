@@ -192,7 +192,7 @@ const tests = {
         const seen = await (await call('view')).json();
         assert.ok(seen.players.some(p => p.deviceId === deviceId && p.name === 'TROUBLE'));
         await call('perk', { deviceId, coins: true, speed: 3 });
-        assert.deepStrictEqual(await (await fetch(url + '/perks/' + deviceId, { headers: { origin: ORIGIN } })).json(), { coins: true, speed: 3, banned: false });
+        assert.deepStrictEqual(await (await fetch(url + '/perks/' + deviceId, { headers: { origin: ORIGIN } })).json(), { coins: true, speed: 3, banned: false, unbanned: false });
         assert.strictEqual((await call('perk', { deviceId, coins: true, speed: 9 })).status, 400);
         await call('ban', { deviceId });
         await sleep(50);
@@ -201,6 +201,13 @@ const tests = {
         assert.strictEqual((await join(c, { game: 'racing', room, playerId: 'player-c-15', deviceId })).error, 'banned');
         assert.strictEqual((await (await fetch(url + '/perks/' + deviceId, { headers: { origin: ORIGIN } })).json()).banned, true);
         await call('unban', { deviceId });
+        // After an unban, the device's own memory of the ban can't put it back.
+        assert.strictEqual((await (await fetch(url + '/perks/' + deviceId + '?banned=1', { headers: { origin: ORIGIN } })).json()).banned, false);
+        // But a device the server has never heard of (as after a restart) is banned again when it reports it.
+        const forgotten = 'device-forgotten-15';
+        const back = await (await fetch(url + '/perks/' + forgotten + '?banned=1', { headers: { origin: ORIGIN } })).json();
+        assert.strictEqual(back.banned, true);
+        assert.strictEqual((await join(c, { game: 'racing', room, playerId: 'player-c-16', deviceId: forgotten })).error, 'banned');
         a.close(); b.close(); c.close();
     },
     async 'stops rude names getting through disguises and leaves normal ones'() {
