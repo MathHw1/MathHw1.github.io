@@ -802,16 +802,20 @@ document.querySelectorAll('#touch .tb').forEach(b=>{const k=b.dataset.k;
   b.addEventListener('pointerdown',e=>{on(e);try{b.setPointerCapture(e.pointerId);}catch(_){}});b.addEventListener('pointerup',off);b.addEventListener('pointercancel',off);b.addEventListener('contextmenu',e=>e.preventDefault());});
 const isTouch=matchMedia('(pointer: coarse)').matches||navigator.maxTouchPoints>0;
 if(isTouch)document.body.classList.add('touch');
-// Your nitro stays locked for the first few seconds of a race, and the screen says so if you try it.
-const NITRO_LOCK=3;let nitroTold=0;
+// Nitro is locked for the first few seconds of a race. Using it early, even during the countdown,
+// freezes your car for a few seconds as a penalty.
+const NITRO_LOCK=3,FREEZE_SECONDS=3;let nitroTold=0,frozenUntil=0;
 function playerInput(){
-  const g=k=>keys[k]||tkeys[k];let nitro=g('nitro');
-  if(state==='race'&&raceT<NITRO_LOCK){
-    if(nitro&&performance.now()-nitroTold>700){nitroTold=performance.now();flash('🔒 Nitro unlocks in '+Math.ceil(NITRO_LOCK-raceT));}
-    nitro=false;
+  const g=k=>keys[k]||tkeys[k],now=performance.now();
+  const early=(state==='countdown'||(state==='race'&&raceT<NITRO_LOCK))&&g('nitro');
+  if(early&&now>=frozenUntil){frozenUntil=now+FREEZE_SECONDS*1000;nitroTold=0;}
+  if(now<frozenUntil){
+    if(player)player.speed=0;
+    if(now-nitroTold>700){nitroTold=now;flash('❄️ Too early! Frozen for '+Math.ceil((frozenUntil-now)/1000));}
+    return{gas:false,brake:false,steer:0,nitro:false};
   }
-  else if(state==='race'&&nitroTold>=0&&raceT>=NITRO_LOCK&&raceT<NITRO_LOCK+.5){nitroTold=-1;flash('🔥 Nitro ready!');}
-  return{gas:g('gas')||tkeys.nitro,brake:g('brake'),steer:(g('left')?1:0)-(g('right')?1:0),nitro};
+  if(state==='race'&&raceT>=NITRO_LOCK&&raceT<NITRO_LOCK+.5&&nitroTold!==-1){nitroTold=-1;flash('🔥 Nitro ready!');}
+  return{gas:g('gas')||tkeys.nitro,brake:g('brake'),steer:(g('left')?1:0)-(g('right')?1:0),nitro:g('nitro')};
 }
 
 /* ---------------- physics ---------------- */
@@ -896,7 +900,7 @@ function show(id){for(const s of screens)$(s).hidden=s!==id;}
 function flash(txt){const f=$('flash');f.textContent=txt;f.style.opacity=1;clearTimeout(flash.t);flash.t=setTimeout(()=>f.style.opacity=0,1300);}
 function soloRace(){online.leave();startRace();}
 function startRace(){
-  initAudio();setupGrid();
+  initAudio();setupGrid();frozenUntil=0;nitroTold=0;
   for(const k of coins){k.taken=false;k.m.visible=true;}for(const k of cans){k.t=0;k.m.visible=true;}
   raceT=0;cdT=3.6;cdShown=-1;coinsPicked=0;hist=[];raceHist=[];histT=0;raceHistT=0;
   show(null);$('hud').hidden=false;$('touch').hidden=!isTouch;$('countdown').hidden=false;
@@ -1067,7 +1071,7 @@ function loop(now){
   if(state==='countdown'){
     cdT-=dt;const n=Math.ceil(cdT-.6);
     if(n!==cdShown){cdShown=n;if(n>0){$('countdown').textContent=n;beep(440,.18,'square',.15);}else{$('countdown').textContent='GO!';beep(880,.4,'square',.18);}}
-    if(cdT<=.6&&state==='countdown'&&!online.hold()){state='race';raceT=0;nitroTold=0;for(const c of cars){c.lapStart=0;if(!c.isPlayer)c.aiBoost=LAUNCH_BOOST;}online.countdownDone();setTimeout(()=>{if(state!=='countdown')$('countdown').hidden=true;},700);}
+    if(cdT<=.6&&state==='countdown'&&!online.hold()){state='race';raceT=0;for(const c of cars){c.lapStart=0;if(!c.isPlayer)c.aiBoost=LAUNCH_BOOST;}online.countdownDone();setTimeout(()=>{if(state!=='countdown')$('countdown').hidden=true;},700);}
   }
   const held=online.tick(dt);
   if((state==='race'||state==='countdown'||state==='finishing'||state==='results')&&!held)update(dt);
