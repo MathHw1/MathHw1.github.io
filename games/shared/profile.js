@@ -8,7 +8,13 @@
 // Focus moving between the arcade and a game frame doesn't count, which is why it checks hasFocus.
 (function () {
     const home = new URL('../../', document.currentScript.src).href;
+    // Following a link or closing the page hides it too, and that mustn't count as leaving.
+    let navigating = false;
+    addEventListener('beforeunload', () => { navigating = true; });
+    addEventListener('pagehide', () => { navigating = true; });
+    document.addEventListener('click', e => { if (e.target.closest && e.target.closest('a[href]')) navigating = true; }, true);
     const leave = () => {
+        if (navigating) return;
         if (window.top !== window) { try { window.parent.postMessage({ nebula: 'away' }, '*'); } catch (_) {} return; }
         location.replace(home);
     };

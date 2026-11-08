@@ -444,7 +444,12 @@ function renderNav() {
 // Clicking into a game counts as staying (hasFocus covers the game frame), and our games report
 // when they lose focus themselves.
 (function () {
-  const toStudy = () => location.replace('./');
+  // Opening a link (Owner, Leaderboard, Support...) also hides this page as it goes, so that mustn't count.
+  let navigating = false;
+  addEventListener('beforeunload', () => { navigating = true; });
+  addEventListener('pagehide', () => { navigating = true; });
+  document.addEventListener('click', e => { if (e.target.closest && e.target.closest('a[href]')) navigating = true; }, true);
+  const toStudy = () => { if (!navigating) location.replace('./'); };
   document.addEventListener('visibilitychange', () => { if (document.hidden) toStudy(); });
   addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) toStudy(); }, 150));
   addEventListener('message', e => {
