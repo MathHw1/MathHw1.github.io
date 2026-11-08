@@ -437,7 +437,7 @@ function scenery(map){
 const HAZARDS={
   mud:{say:'🟤 Mud! Slowed for 5s',colour:'#4a3826',opacity:.75,size:7,hit:.7,slowFor:5,slow:.42},
   sand:{say:'🏜️ Quicksand! Stuck for 5s',colour:'#b3925c',opacity:.7,size:7,stuck:5,slow:.35},
-  ice:{say:'🧊 Ice! No grip',colour:'#dcf3ff',opacity:.38,size:10,grip:.05},
+  ice:{say:'🧊 Ice! No grip',colour:'#dcf3ff',opacity:.38,size:8,grip:.05},
   shock:{say:'⚡ Shorted out!',colour:'#1f2a44',opacity:.85,size:6.5,hit:.5,stall:3,glow:'#22e3ff'}
 };
 //   hit: share of your speed left the moment you touch it.  slowFor: seconds you stay slowed, even after leaving.
@@ -452,7 +452,7 @@ function placeHazards(map){
     // Spread round the lap, clear of the start and the jumps, and the same every time so online races match.
     let i=Math.floor(90+(N-150)*(k+.5)/HAZARD_COUNT);
     while(jumps.some(j=>i>j.rampStart-120&&i<j.end+25))i=(i+40)%N;   // keep every jump's run-up clear
-    const lat=Math.sin(i*1.7+k)*W*.25,x=P[i].x+NR[i].x*lat,z=P[i].z+NR[i].z*lat;hazards.push({i,x,z,size:h.size,type:map.hazard});
+    const lat=Math.sin(i*1.7+k)*W*.25,x=P[i].x+NR[i].x*lat,z=P[i].z+NR[i].z*lat;hazards.push({i,x,z,lat,size:h.size,type:map.hazard});
     const patch=new THREE.Mesh(new THREE.CircleGeometry(1,28),new THREE.MeshStandardMaterial({color:h.colour,transparent:true,opacity:h.opacity,depthWrite:false,
       roughness:map.hazard==='ice'?.05:.95,metalness:map.hazard==='ice'?.4:0,emissive:h.glow||'#000',emissiveIntensity:h.glow?.07:0}));
     patch.rotation.x=-Math.PI/2;patch.rotation.z=headingAt(i);patch.scale.set(h.size,h.size*1.4,1);patch.position.set(x,.09,z);patch.receiveShadow=true;track.add(patch);
@@ -565,7 +565,8 @@ function useItem(c,back){
   if(it==='slick'){
     const dist=back?-5:28,m=new THREE.Mesh(slickGeo,slickMat);m.rotation.x=-Math.PI/2;
     const x=c.pos.x+d.x*dist,z=c.pos.z+d.z*dist;m.position.set(x,.12,z);track.add(m);
-    const sl={m,x,z,owner:c,born:raceT,id:Math.random().toString(36).slice(2)};slicks.push(sl);
+    const i=(c.idx+(back?-2:9)+N)%N;
+    const sl={m,x,z,i,lat:lateralOf(i,x,z),size:2.6,owner:c,born:raceT,id:Math.random().toString(36).slice(2)};slicks.push(sl);
     if(online.on&&c.isPlayer)online.lobby.send({t:'slick',x,z,id:sl.id});
   }
   else if(it==='orb'){
@@ -622,6 +623,29 @@ function itemsStep(dt){
 function updateItemHud(){
   const it=player&&player.item;$('hItem').textContent=it?ITEMS[it].icon:'—';
   document.querySelectorAll('.tb.item').forEach(b=>b.classList.toggle('ready',!!it));
+}
+
+// Rivals watch the road ahead and steer round hazards and slicks in their lane. Each one
+// misjudges now and then (DODGE_SKILL), so they still get caught sometimes.
+const DODGE_SKILL=.88,DODGE_AHEAD=75,DODGE_ROOM=4;
+const lateralOf=(i,x,z)=>(x-P[i].x)*NR[i].x+(z-P[i].z)*NR[i].z;
+function nearestPoint(x,z){let best=0,bd=1e12;for(let i=0;i<N;i+=2){const d=(P[i].x-x)**2+(P[i].z-z)**2;if(d<bd){bd=d;best=i;}}return best;}
+function dodge(c){
+  let next=null,nd=1e9;
+  for(const o of hazards.concat(slicks)){
+    const ahead=(o.i-c.idx+N)%N;if(ahead<4||ahead>DODGE_AHEAD)continue;
+    if(Math.abs(o.lat-c.lane)>o.size+DODGE_ROOM-1)continue;   // not in this car's way
+    if(ahead<nd){nd=ahead;next=o;}
+  }
+  if(!next)return false;
+  c.dodged=c.dodged||new Map();
+  if(!c.dodged.has(next))c.dodged.set(next,Math.random()<DODGE_SKILL);
+  if(!c.dodged.get(next))return false;                          // this one it misjudges
+  const edge=W/2-3,left=next.lat-next.size-DODGE_ROOM,right=next.lat+next.size+DODGE_ROOM;
+  // Pass on whichever side has room, preferring the side the car is already on.
+  const goLeft=left>-edge&&(right>edge||c.lane<next.lat);
+  c.laneGoal=clamp(goLeft?left:right,-edge,edge);c.laneT=Math.max(c.laneT,1);
+  return true;
 }
 
 function respawnAfterFall(c){
@@ -891,7 +915,7 @@ const online={
   },
   receive(msg){
     if(!msg)return;
-    if(msg.t==='slick'&&Number.isFinite(msg.x)&&Number.isFinite(msg.z)&&slicks.length<60){const m=new THREE.Mesh(slickGeo,slickMat);m.rotation.x=-Math.PI/2;m.position.set(msg.x,.12,msg.z);track.add(m);slicks.push({m,x:msg.x,z:msg.z,owner:null,born:raceT,id:String(msg.id)});return;}
+    if(msg.t==='slick'&&Number.isFinite(msg.x)&&Number.isFinite(msg.z)&&slicks.length<60){const m=new THREE.Mesh(slickGeo,slickMat);m.rotation.x=-Math.PI/2;m.position.set(msg.x,.12,msg.z);track.add(m);const i=nearestPoint(msg.x,msg.z);slicks.push({m,x:msg.x,z:msg.z,i,lat:lateralOf(i,msg.x,msg.z),size:2.6,owner:null,born:raceT,id:String(msg.id)});return;}
     if(msg.t==='slickGone'){const k=slicks.findIndex(sl=>sl.id===String(msg.id));if(k>=0){track.remove(slicks[k].m);slicks.splice(k,1);}return;}
     if(msg.t==='hit'&&msg.s===this.lobby.seat&&player){spinOut(player,1.8);return;}
     if(msg.t==='go'&&Array.isArray(msg.racers)){if(msg.racers.includes(this.lobby.seat)){raceClass=CLASSES.find(k=>k.id===msg.cls)||CLASSES[1];if(MAPS.some(m=>m.id===msg.map)&&msg.map!==currentMap.id)buildTrack(msg.map);fillClasses();this.begin(msg.racers);}}
@@ -1148,9 +1172,11 @@ function stepCar(c,inp,dt){
   for(const f of u.flames){f.visible=boost;if(boost)f.scale.set(1,1,.7+Math.random()*.6);}
 }
 function aiInput(c,dt){
-  const look=Math.floor(10+Math.max(0,c.speed)*.35),ti=(c.idx+look)%N;
   c.laneT-=dt;if(c.laneT<0){c.laneT=2+Math.random()*3;c.laneGoal=(Math.random()*2-1)*W*.28;}
-  c.lane+=(c.laneGoal-c.lane)*Math.min(1,dt*.8);
+  const dodging=dodge(c);
+  // Aim at a nearer point while dodging, so the car actually swerves instead of drifting over.
+  const look=Math.floor(dodging?6+Math.max(0,c.speed)*.18:10+Math.max(0,c.speed)*.35),ti=(c.idx+look)%N;
+  c.lane+=(c.laneGoal-c.lane)*Math.min(1,dt*(dodging?2.6:.8));
   const tx=P[ti].x+NR[ti].x*c.lane,tz=P[ti].z+NR[ti].z*c.lane;
   const d=wrapA(Math.atan2(tx-c.pos.x,tz-c.pos.z)-c.h);
   let kmax=0;for(let j=5;j<=75;j+=7)kmax=Math.max(kmax,K[(c.idx+j)%N]);

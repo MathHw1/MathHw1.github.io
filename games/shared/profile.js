@@ -19,7 +19,11 @@
         if (window.top !== window) { try { window.parent.postMessage({ nebula: 'away' }, '*'); } catch (_) {} return; }
         location.replace(home);
     };
-    document.addEventListener('visibilitychange', () => { if (document.hidden) leave(); });
+    // The game blanks itself the moment it's hidden, so no preview of it is left behind on an iPad.
+    document.addEventListener('visibilitychange', () => {
+        document.documentElement.style.visibility = document.hidden ? 'hidden' : '';
+        if (document.hidden) leave();
+    });
     addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) leave(); }, 150));
 })();
 
