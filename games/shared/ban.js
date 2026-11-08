@@ -6,11 +6,22 @@
 
 const NebulaBan = (function () {
     const KEY = 'nebula-banned';
-    const CHECK_EVERY_MS = 60000;
+    const CHECK_EVERY_MS = 15000;
     let screen = null;
 
+    // Remembered in localStorage and in the profile, which is also backed up to IndexedDB.
+    function remembered() {
+        let here = false;
+        try { here = localStorage.getItem(KEY) === 'yes'; } catch (_) {}
+        return here || !!NebulaProfile.stats('device', {}).banned;
+    }
+    function remember(banned) {
+        try { banned ? localStorage.setItem(KEY, 'yes') : localStorage.removeItem(KEY); } catch (_) {}
+        NebulaProfile.setStats('device', { banned });
+    }
+
     function show() {
-        try { localStorage.setItem(KEY, 'yes'); } catch (_) {}
+        remember(true);
         if (screen) return;
         screen = document.createElement('div');
         screen.setAttribute('role', 'alertdialog');
@@ -23,22 +34,32 @@ const NebulaBan = (function () {
         (document.body || document.documentElement).appendChild(screen);
     }
     function hide() {
-        try { localStorage.removeItem(KEY); } catch (_) {}
+        remember(false);
         if (screen) { screen.remove(); screen = null; }
     }
+    // A device that remembers a ban tells the server, so the ban survives the server restarting.
+    // Only the owner's unban (status.unbanned) lifts a remembered ban.
     function check() {
-        NebulaProfile.ready.then(() => fetch(LOBBY_SERVER_URL + '/perks/' + NebulaProfile.deviceId()))
-            .then(reply => reply.ok ? reply.json() : null)
-            .then(status => { if (status) (status.banned ? show : hide)(); })
-            .catch(() => {});
+        NebulaProfile.ready.then(() => {
+            const wasBanned = remembered();
+            if (wasBanned) show();
+            return fetch(LOBBY_SERVER_URL + '/perks/' + NebulaProfile.deviceId() + (wasBanned ? '?banned=1' : ''))
+                .then(reply => reply.ok ? reply.json() : null)
+                .then(status => {
+                    if (!status) return;
+                    if (status.banned) show();
+                    else if (!wasBanned || status.unbanned) hide();
+                });
+        }).catch(() => {});
     }
 
-    let remembered = false;
-    try { remembered = localStorage.getItem(KEY) === 'yes'; } catch (_) {}
-    if (remembered) {
+    let early = false;
+    try { early = localStorage.getItem(KEY) === 'yes'; } catch (_) {}
+    if (early) {
         if (document.body) show(); else addEventListener('DOMContentLoaded', show);
     }
     addEventListener('nebula-banned', show);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
     check();
     setInterval(check, CHECK_EVERY_MS);
     return { show, hide, check };
