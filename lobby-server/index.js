@@ -52,6 +52,15 @@ const bannedDevices = new Set();
 // Free hosts forget everything when they restart, so a banned device remembers its own ban and reports
 // it again (see /perks). Only an unban the owner gives since this server started can lift it.
 const unbannedDevices = new Set();
+// A ban also covers the username, so coming back under the same name on a new device is caught.
+// Shared names (the default and the quick picks) are never banned, or it would catch other players.
+const bannedNames = new Set();
+const SHARED_NAMES = new Set(['PLAYER', 'YOU', 'SPEEDY FOX', 'WHEELIE KING', 'TURBO TIGER', 'SHADOW RIDER', 'NEON WOLF', 'ROCKET ACE']);
+const nameBanned = name => typeof name === 'string' && bannedNames.has(name.trim()) && !SHARED_NAMES.has(name.trim());
+function banDevice(deviceId) {
+    bannedDevices.add(deviceId);
+    unbannedDevices.delete(deviceId);
+}
 // Devices seen lately, so the owner panel can list players. Kept in memory only, newest last.
 const seenDevices = new Map();     // deviceId -> { name, game, at }
 const MAX_SEEN = 500;
@@ -114,6 +123,7 @@ function joinRoom(socket, request) {
     if (!ROOM_SIZES[game] || typeof playerId !== 'string' || playerId.length < 8 || playerId.length > 64) {
         return { ok: false, error: 'bad-request' };
     }
+    if (request.deviceId && nameBanned(request.name) && !unbannedDevices.has(request.deviceId)) banDevice(request.deviceId);
     if (request.deviceId && bannedDevices.has(request.deviceId)) return { ok: false, error: 'banned' };
     noteDevice(request.deviceId, cleanName(request.name), game);
 
@@ -236,7 +246,9 @@ app.options('/scores', (req, res) => {
 app.get('/perks/:deviceId', (req, res) => {
     allowSite(req, res);
     const id = req.params.deviceId;
-    if (req.query.banned === '1' && DEVICE_PATTERN.test(id) && !unbannedDevices.has(id)) bannedDevices.add(id);
+    // Pages report the username too, so the owner's player list and name bans see everyone, not just online players.
+    if (typeof req.query.name === 'string' && NAME_PATTERN.test(req.query.name.trim())) noteDevice(id, cleanName(req.query.name), seenDevices.has(id) ? seenDevices.get(id).game : 'arcade');
+    if ((req.query.banned === '1' || nameBanned(req.query.name)) && DEVICE_PATTERN.test(id) && !unbannedDevices.has(id)) banDevice(id);
     res.json({ ...(perks.get(id) || { coins: false, speed: 1 }), banned: bannedDevices.has(id), unbanned: unbannedDevices.has(id) });
 });
 
@@ -254,6 +266,7 @@ app.post('/scores', express.json({ limit: '1kb' }), (req, res) => {
     if (!scores.has(board) || typeof name !== 'string' || !NAME_PATTERN.test(name) || !name.trim() ||
         typeof deviceId !== 'string' || !DEVICE_PATTERN.test(deviceId) ||
         !Number.isInteger(score) || score < 1 || score > MAX_SCORE) return res.sendStatus(400);
+    if (nameBanned(name) && !unbannedDevices.has(deviceId)) banDevice(deviceId);
     if (bannedDevices.has(deviceId)) return res.sendStatus(403);
     const clean = name.trim();
     if (isRude(clean)) return res.sendStatus(422);
@@ -327,8 +340,9 @@ app.post('/admin/:action', express.json({ limit: '1kb' }), (req, res) => {
         wipe(scores.get(board));
     }
     else if (req.params.action === 'ban') {
-        bannedDevices.add(deviceId);
-        unbannedDevices.delete(deviceId);
+        banDevice(deviceId);
+        const seen = seenDevices.get(deviceId);
+        if (seen && !SHARED_NAMES.has(seen.name)) bannedNames.add(seen.name);
         for (const list of scores.values()) wipe(list);
         kickDevice(deviceId);
     }
@@ -340,6 +354,8 @@ app.post('/admin/:action', express.json({ limit: '1kb' }), (req, res) => {
     else if (req.params.action === 'unban') {
         bannedDevices.delete(deviceId);
         unbannedDevices.add(deviceId);
+        const seen = seenDevices.get(deviceId);
+        if (seen) bannedNames.delete(seen.name);
     }
     else return res.sendStatus(404);
     res.json(adminView());

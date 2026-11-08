@@ -203,6 +203,14 @@ const tests = {
         await call('unban', { deviceId });
         // After an unban, the device's own memory of the ban can't put it back.
         assert.strictEqual((await (await fetch(url + '/perks/' + deviceId + '?banned=1', { headers: { origin: ORIGIN } })).json()).banned, false);
+        // The banned player's username is banned too: a brand-new device using it gets caught.
+        await call('ban', { deviceId });
+        assert.strictEqual((await join(c, { game: 'racing', room, playerId: 'player-c-17', deviceId: 'device-new-17', name: 'TROUBLE' })).error, 'banned');
+        assert.strictEqual((await (await fetch(url + '/perks/device-new-18?name=TROUBLE', { headers: { origin: ORIGIN } })).json()).banned, true);
+        // A shared name like PLAYER is never banned.
+        assert.strictEqual((await (await fetch(url + '/perks/device-new-19?name=PLAYER', { headers: { origin: ORIGIN } })).json()).banned, false);
+        await call('unban', { deviceId });
+        assert.strictEqual((await (await fetch(url + '/perks/device-new-20?name=TROUBLE', { headers: { origin: ORIGIN } })).json()).banned, false);
         // But a device the server has never heard of (as after a restart) is banned again when it reports it.
         const forgotten = 'device-forgotten-15';
         const back = await (await fetch(url + '/perks/' + forgotten + '?banned=1', { headers: { origin: ORIGIN } })).json();
