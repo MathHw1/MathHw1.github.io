@@ -76,6 +76,7 @@
     // A four- or five-finger swipe or pinch is the iPad's app-switch gesture; normal play never uses that many.
     const MANY_FINGERS = 4;
     addEventListener('touchstart', e => { if (e.touches.length >= MANY_FINGERS) mask(); }, { capture: true, passive: true });
+    addEventListener('gesturechange', e => { if (e.scale < 0.8) mask(); });       // Safari's pinch: only a clear squeeze inward
     addEventListener('touchend', e => { if (masked && e.touches.length === 0) setTimeout(() => { if (document.hasFocus() && !document.hidden) unmask(); }, 300); }, { capture: true, passive: true });
     addEventListener('blur', () => {
         mask();

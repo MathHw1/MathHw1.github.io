@@ -226,6 +226,7 @@
 <script src="games/shared/lobby-client.js"></script>
 <script src="games/shared/profile.js"></script>
 <script src="games/shared/ban.js"></script>
+<script src="games/shared/in-app-browser.js"></script>
 <script>
 const GENRES = ['All', 'Action', 'Racing', 'Sports', 'Puzzle', 'Strategy'];
 const ICONS  = { All: '✨', Action: '⚡', Racing: '🏎️', Sports: '⚽', Puzzle: '🧩', Strategy: '🗺️' };
@@ -461,6 +462,13 @@ function renderNav() {
   document.addEventListener('freeze', toStudy);                // Chrome's Page Lifecycle API; Safari doesn't send it
   // A four- or five-finger swipe or pinch is the iPad's app-switch gesture: switch before it finishes.
   addEventListener('touchstart', e => { if (e.touches.length >= 4) toStudy(); }, { capture: true, passive: true });
+  // Safari's own pinch events: only a clear squeeze inward counts, so two thumbs on game buttons never do.
+  const PINCH_IN = 0.8;
+  addEventListener('gesturechange', e => { if (e.scale < PINCH_IN) toStudy(); });
+  // Back on the tab without study mode on (the player only tapped something here): tell the game to redraw.
+  const showGame = () => { if (!panicked) { try { $('frame').contentWindow.postMessage({ nebula: 'stay' }, location.origin); } catch (_) {} } };
+  addEventListener('focus', showGame);
+  addEventListener('pageshow', showGame);
   addEventListener('blur', () => {
     // Focus moving into a game frame isn't leaving. Anything else is, so switch straight away.
     const intoGame = document.activeElement && document.activeElement.tagName === 'IFRAME';
