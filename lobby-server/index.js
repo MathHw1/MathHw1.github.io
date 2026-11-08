@@ -18,7 +18,7 @@ const TRANSPORTS = (process.env.TRANSPORTS || 'websocket,polling').split(',');
 
 const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0/O or 1/I/L, so codes are easy to read out
 const CODE_LENGTH = 5;
-const ROOM_SIZES = { pool: 4, chess: 2, wheelie: 4, racing: 4 };
+const ROOM_SIZES = { pool: 4, chess: 2, wheelie: 4, racing: 6 };
 const NAME_PATTERN = /^[A-Z0-9 ]{1,12}$/;
 const DEVICE_PATTERN = /^[a-zA-Z0-9-]{8,64}$/;
 const MAX_ROOMS = 5000;
@@ -37,7 +37,7 @@ const CLEANUP_MS = TEST_GRACE_MS ? Math.min(5000, TEST_GRACE_MS / 2) : 5000;
 // lower: true means the smallest value wins, as with fastest times.
 const BOARDS = {
     'wheelie:score': {}, 'wheelie:level': {}, 'wheelie:miles': {}, 'wheelie:time': { lower: true },
-    'racing:time': { lower: true }, 'chess:elo': {}, 'pool:wins': {},
+    'racing:time': { lower: true }, 'racing:time50': { lower: true }, 'racing:time150': { lower: true }, 'racing:time200': { lower: true }, 'chess:elo': {}, 'pool:wins': {},
     'tunnel:score': {}, 'tunnel:level': {}, 'tunnel:distance': {}, 'tunnel:time': {}
 };
 const BOARD_SIZE = 200;
@@ -45,6 +45,8 @@ const SHOWN_SCORES = 20;
 const MAX_SCORE = 50000000;
 const MAX_SUBMITS_PER_MINUTE = 40;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';    // the admin tools stay off until this is set
+// Tiny Turbo has a fastest-race board for every course and speed class. Pine Valley keeps its old names.
+for (const course of ['dunes', 'frost', 'neon']) for (const cls of ['50', '100', '150', '200']) BOARDS['racing:' + course + cls] = { lower: true };
 const scores = new Map(Object.keys(BOARDS).map(board => [board, []]));   // entries: { deviceId, name, score }
 const bannedDevices = new Set();
 const submits = new Map();         // address -> { count, resetAt }
