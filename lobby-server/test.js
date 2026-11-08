@@ -183,6 +183,26 @@ const tests = {
         assert.deepStrictEqual(b.roster.seats.slice(0, 2).map(s => s.ready), [false, false]);
         a.close(); b.close();
     },
+    async 'bans kick a device out of its room and keep it out, and perks follow the device'() {
+        const a = await connect(), b = await connect(), c = await connect();
+        const deviceId = 'device-banned-15';
+        const { room } = await join(a, { game: 'racing', create: true, playerId: 'player-a-15', deviceId: 'device-host-15' });
+        await join(b, { game: 'racing', room, playerId: 'player-b-15', deviceId, name: 'TROUBLE' });
+        const call = (path, body) => fetch(url + '/admin/' + path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', origin: ORIGIN, 'x-admin-password': 'test-owner-pass' }, body: body && JSON.stringify(body) });
+        const seen = await (await call('view')).json();
+        assert.ok(seen.players.some(p => p.deviceId === deviceId && p.name === 'TROUBLE'));
+        await call('perk', { deviceId, coins: true, speed: 3 });
+        assert.deepStrictEqual(await (await fetch(url + '/perks/' + deviceId, { headers: { origin: ORIGIN } })).json(), { coins: true, speed: 3, banned: false });
+        assert.strictEqual((await call('perk', { deviceId, coins: true, speed: 9 })).status, 400);
+        await call('ban', { deviceId });
+        await sleep(50);
+        assert.strictEqual(b.last.event, 'kicked');
+        assert.strictEqual(a.roster.seats[1], null);
+        assert.strictEqual((await join(c, { game: 'racing', room, playerId: 'player-c-15', deviceId })).error, 'banned');
+        assert.strictEqual((await (await fetch(url + '/perks/' + deviceId, { headers: { origin: ORIGIN } })).json()).banned, true);
+        await call('unban', { deviceId });
+        a.close(); b.close(); c.close();
+    },
     async 'stops rude names getting through disguises and leaves normal ones'() {
         const { isRude } = require('./name-filter');
         for (const rude of ['FUCK', 'F U C K', 'FUUUCK', 'SH1T', 'B1TCH', 'N1GGER', 'N1GG3R', 'NIGGA', 'NAGGOR', 'F@G', 'A55', 'H1TL3R']) assert.ok(isRude(rude), rude);

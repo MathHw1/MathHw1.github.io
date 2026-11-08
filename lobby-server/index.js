@@ -49,6 +49,18 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';    // the admin tools s
 for (const course of ['dunes', 'frost', 'neon']) for (const cls of ['50', '100', '150', '200']) BOARDS['racing:' + course + cls] = { lower: true };
 const scores = new Map(Object.keys(BOARDS).map(board => [board, []]));   // entries: { deviceId, name, score }
 const bannedDevices = new Set();
+// Devices seen lately, so the owner panel can list players. Kept in memory only, newest last.
+const seenDevices = new Map();     // deviceId -> { name, game, at }
+const MAX_SEEN = 500;
+// Owner-granted extras, by device: { coins: true, speed: 1, 2 or 3 }.
+const perks = new Map();
+
+function noteDevice(deviceId, name, game) {
+    if (typeof deviceId !== 'string' || !DEVICE_PATTERN.test(deviceId)) return;
+    seenDevices.delete(deviceId);
+    seenDevices.set(deviceId, { name: name || 'PLAYER', game, at: Date.now() });
+    if (seenDevices.size > MAX_SEEN) seenDevices.delete(seenDevices.keys().next().value);
+}
 const submits = new Map();         // address -> { count, resetAt }
 
 const rooms = new Map();   // code -> { code, game, host, seats: [seat, ...], kicked, log, nextSeq, createdAt }
@@ -99,6 +111,8 @@ function joinRoom(socket, request) {
     if (!ROOM_SIZES[game] || typeof playerId !== 'string' || playerId.length < 8 || playerId.length > 64) {
         return { ok: false, error: 'bad-request' };
     }
+    if (request.deviceId && bannedDevices.has(request.deviceId)) return { ok: false, error: 'banned' };
+    noteDevice(request.deviceId, cleanName(request.name), game);
 
     if (create) {
         if (rooms.size >= MAX_ROOMS) return { ok: false, error: 'server-full' };
@@ -214,6 +228,12 @@ app.options('/scores', (req, res) => {
     res.sendStatus(204);
 });
 
+// Each page asks about its own device now and then: its extras, and whether it's banned.
+app.get('/perks/:deviceId', (req, res) => {
+    allowSite(req, res);
+    res.json({ ...(perks.get(req.params.deviceId) || { coins: false, speed: 1 }), banned: bannedDevices.has(req.params.deviceId) });
+});
+
 app.get('/scores/:game/:category', (req, res) => {
     allowSite(req, res);
     const board = req.params.game + ':' + req.params.category;
@@ -231,6 +251,7 @@ app.post('/scores', express.json({ limit: '1kb' }), (req, res) => {
     if (bannedDevices.has(deviceId)) return res.sendStatus(403);
     const clean = name.trim();
     if (isRude(clean)) return res.sendStatus(422);
+    noteDevice(deviceId, clean, board.split(':')[0]);
 
     // One line per device, keeping its best. The newest name replaces the old one.
     const list = scores.get(board), lower = BOARDS[board].lower, mine = list.find(entry => entry.deviceId === deviceId);
@@ -260,8 +281,21 @@ app.options('/admin/:action', (req, res) => {
 
 const adminView = () => ({
     boards: Object.fromEntries([...scores].map(([board, list]) => [board, list])),
-    banned: [...bannedDevices]
+    banned: [...bannedDevices],
+    players: [...seenDevices].reverse().map(([deviceId, seen]) => ({ deviceId, ...seen, perks: perks.get(deviceId) || { coins: false, speed: 1 }, banned: bannedDevices.has(deviceId) }))
 });
+
+// Removes a banned device from any room it's in, right away.
+function kickDevice(deviceId) {
+    for (const room of rooms.values()) {
+        room.seats.forEach((seat, n) => {
+            if (!seat || seat.deviceId !== deviceId) return;
+            const target = io.sockets.sockets.get(seat.socketId);
+            if (target) target.emit('banned');
+            kickSeat(room, n);
+        });
+    }
+}
 
 app.get('/admin/view', (req, res) => {
     if (!allowSite(req, res)) return res.sendStatus(403);
@@ -274,7 +308,7 @@ app.post('/admin/:action', express.json({ limit: '1kb' }), (req, res) => {
     if (!allowSite(req, res)) return res.sendStatus(403);
     if (tooManySubmits(req)) return res.sendStatus(429);
     if (!isOwner(req)) return res.sendStatus(401);
-    const { deviceId, board, name } = req.body || {};
+    const { deviceId, board, name, coins, speed } = req.body || {};
     if (typeof deviceId !== 'string' || !DEVICE_PATTERN.test(deviceId)) return res.sendStatus(400);
     const wipe = list => { for (let i = list.length - 1; i >= 0; i--) if (list[i].deviceId === deviceId) list.splice(i, 1); };
 
@@ -289,6 +323,12 @@ app.post('/admin/:action', express.json({ limit: '1kb' }), (req, res) => {
     else if (req.params.action === 'ban') {
         bannedDevices.add(deviceId);
         for (const list of scores.values()) wipe(list);
+        kickDevice(deviceId);
+    }
+    else if (req.params.action === 'perk') {
+        if (typeof coins !== 'boolean' || ![1, 2, 3].includes(speed)) return res.sendStatus(400);
+        if (!coins && speed === 1) perks.delete(deviceId);
+        else perks.set(deviceId, { coins, speed });
     }
     else if (req.params.action === 'unban') bannedDevices.delete(deviceId);
     else return res.sendStatus(404);
