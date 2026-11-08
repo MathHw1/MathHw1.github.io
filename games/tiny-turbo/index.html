@@ -712,13 +712,16 @@ $('olReady').onclick=()=>online.lobby.setReady(!online.lobby.isReady);
 /* ---------------- speed classes ---------------- */
 // Like engine sizes: every car gets faster, and the rivals get faster still on top of that.
 //   speed: everyone's top speed and acceleration.  rivals: the computer drivers' extra pace.
-//   catchUp: how much faster a rival can go when it's behind you.  board: its fastest-race leaderboard.
+//   catchUp: how much faster a rival can go when it's behind you.  holdBack: the slowest a rival goes
+//   when it's far ahead, so on fast classes a leader keeps its pace instead of waiting for you.  corners: how much rivals slow for bends
+//   (lower is braver).  nitro: how often rivals boost.  board: its fastest-race leaderboard.
 const CLASSES=[
-  {id:'50',name:'50cc',speed:.8,rivals:.96,catchUp:1.06,board:'racing:time50'},
-  {id:'100',name:'100cc',speed:1,rivals:1.04,catchUp:1.1,board:'racing:time'},
-  {id:'150',name:'150cc',speed:1.18,rivals:1.1,catchUp:1.14,board:'racing:time150'},
-  {id:'200',name:'200cc',speed:1.36,rivals:1.16,catchUp:1.18,board:'racing:time200'}
+  {id:'50',name:'50cc',speed:.8,rivals:1.02,catchUp:1.12,holdBack:.88,corners:1.1,nitro:.7,board:'racing:time50'},
+  {id:'100',name:'100cc',speed:1,rivals:1.1,catchUp:1.18,holdBack:.95,corners:.95,nitro:1.1,board:'racing:time'},
+  {id:'150',name:'150cc',speed:1.18,rivals:1.17,catchUp:1.24,holdBack:1,corners:.85,nitro:1.5,board:'racing:time150'},
+  {id:'200',name:'200cc',speed:1.36,rivals:1.24,catchUp:1.3,holdBack:1.02,corners:.75,nitro:2,board:'racing:time200'}
 ];
+const LAUNCH_BOOST=1.6;   // seconds of nitro every rival fires at the start
 let raceClass=CLASSES.find(k=>k.id===save.cls)||CLASSES[1];
 function pickClass(id){raceClass=CLASSES.find(k=>k.id===id)||CLASSES[1];save.cls=raceClass.id;persist();fillClasses();}
 function fillClasses(){
@@ -757,7 +760,7 @@ function makeCar(cfg,name,isPlayer,skill,colorHex){
 }
 function setupGrid(){
   for(const c of cars)scene.remove(c.mesh);cars=[];finishOrder=[];
-  const order=online.on?Array.from({length:6},(_,k)=>k===online.lobby.seat?'me':'skip'):['ai','ai','ai','me','ai','ai'];let ai=0;
+  const order=online.on?Array.from({length:6},(_,k)=>k===online.lobby.seat?'me':'skip'):['ai','ai','ai','ai','ai','me'];let ai=0;   // you start at the back
   order.forEach((who,k)=>{
     if(who==='skip')return;
     const row=Math.floor(k/2),col=k%2;const idx=N-12-row*13;const lat=col?-5:5;
@@ -799,7 +802,17 @@ document.querySelectorAll('#touch .tb').forEach(b=>{const k=b.dataset.k;
   b.addEventListener('pointerdown',e=>{on(e);try{b.setPointerCapture(e.pointerId);}catch(_){}});b.addEventListener('pointerup',off);b.addEventListener('pointercancel',off);b.addEventListener('contextmenu',e=>e.preventDefault());});
 const isTouch=matchMedia('(pointer: coarse)').matches||navigator.maxTouchPoints>0;
 if(isTouch)document.body.classList.add('touch');
-function playerInput(){const g=k=>keys[k]||tkeys[k];return{gas:g('gas')||tkeys.nitro,brake:g('brake'),steer:(g('left')?1:0)-(g('right')?1:0),nitro:g('nitro')};}
+// Your nitro stays locked for the first few seconds of a race, and the screen says so if you try it.
+const NITRO_LOCK=3;let nitroTold=0;
+function playerInput(){
+  const g=k=>keys[k]||tkeys[k];let nitro=g('nitro');
+  if(state==='race'&&raceT<NITRO_LOCK){
+    if(nitro&&performance.now()-nitroTold>700){nitroTold=performance.now();flash('🔒 Nitro unlocks in '+Math.ceil(NITRO_LOCK-raceT));}
+    nitro=false;
+  }
+  else if(state==='race'&&nitroTold>=0&&raceT>=NITRO_LOCK&&raceT<NITRO_LOCK+.5){nitroTold=-1;flash('🔥 Nitro ready!');}
+  return{gas:g('gas')||tkeys.nitro,brake:g('brake'),steer:(g('left')?1:0)-(g('right')?1:0),nitro};
+}
 
 /* ---------------- physics ---------------- */
 function resetCar(c){const i=c.idx;c.pos.set(P[i].x,0,P[i].z);c.h=headingAt(i);c.speed=0;c.steer=0;c.stuck=0;}
@@ -859,10 +872,10 @@ function aiInput(c,dt){
   const tx=P[ti].x+NR[ti].x*c.lane,tz=P[ti].z+NR[ti].z*c.lane;
   const d=wrapA(Math.atan2(tx-c.pos.x,tz-c.pos.z)-c.h);
   let kmax=0;for(let j=5;j<=75;j+=7)kmax=Math.max(kmax,K[(c.idx+j)%N]);
-  if(!c.isPlayer){const diff=c.prog-(player?player.prog:0);c.rb=clamp(1-diff*.00045,.9,raceClass.catchUp)*c.skill;}else c.rb=1;
-  const target=c.stats.top*c.rb*(1-Math.min(.5,kmax*1.15));
+  if(!c.isPlayer){const diff=c.prog-(player?player.prog:0);c.rb=clamp(1-diff*.00045,raceClass.holdBack,raceClass.catchUp)*c.skill;}else c.rb=1;
+  const target=c.stats.top*c.rb*(1-Math.min(.5,kmax*raceClass.corners));
   if(c.aiBoost>0)c.aiBoost-=dt;
-  else if(kmax<.12&&c.nitro>.6&&Math.random()<dt*.4)c.aiBoost=1+Math.random();
+  else if(kmax<.14&&c.nitro>.35&&Math.random()<dt*raceClass.nitro)c.aiBoost=1+Math.random();
   // stuck
   if(Math.abs(c.speed)<3&&state!=='countdown'){c.stuck+=dt;if(c.stuck>2.2)resetCar(c);}else c.stuck=0;
   return{gas:c.speed<target,brake:c.speed>target+4,steer:clamp(d*3,-1,1),nitro:c.aiBoost>0};
@@ -1054,7 +1067,7 @@ function loop(now){
   if(state==='countdown'){
     cdT-=dt;const n=Math.ceil(cdT-.6);
     if(n!==cdShown){cdShown=n;if(n>0){$('countdown').textContent=n;beep(440,.18,'square',.15);}else{$('countdown').textContent='GO!';beep(880,.4,'square',.18);}}
-    if(cdT<=.6&&state==='countdown'&&!online.hold()){state='race';raceT=0;for(const c of cars)c.lapStart=0;online.countdownDone();setTimeout(()=>{if(state!=='countdown')$('countdown').hidden=true;},700);}
+    if(cdT<=.6&&state==='countdown'&&!online.hold()){state='race';raceT=0;nitroTold=0;for(const c of cars){c.lapStart=0;if(!c.isPlayer)c.aiBoost=LAUNCH_BOOST;}online.countdownDone();setTimeout(()=>{if(state!=='countdown')$('countdown').hidden=true;},700);}
   }
   const held=online.tick(dt);
   if((state==='race'||state==='countdown'||state==='finishing'||state==='results')&&!held)update(dt);
