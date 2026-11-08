@@ -450,7 +450,9 @@ function renderNav() {
   // Opening a link (Owner, Leaderboard, Support...) also hides this page as it goes, so that mustn't count.
   let navigating = false;
   addEventListener('beforeunload', () => { navigating = true; });
-  addEventListener('pagehide', () => { navigating = true; });
+  // Whatever the reason the page is going away, leave it showing the notes, so neither an iPad's
+  // tab-switcher card nor the Back button can show a game.
+  addEventListener('pagehide', () => { navigating = true; if (!panicked) setPanic(true); });
   document.addEventListener('click', e => { if (e.target.closest && e.target.closest('a[href]')) navigating = true; }, true);
   const toStudy = () => { if (!navigating && !panicked) setPanic(true); };
   // Switch the moment the page hides, so an iPad's tab-switcher preview already shows the notes.
@@ -461,9 +463,14 @@ function renderNav() {
     if (!intoGame) toStudy();
     else setTimeout(() => { if (!document.hasFocus()) toStudy(); }, 150);
   });
-  // A game frame lost focus: if the whole page lost it too, the player left (not just clicked the arcade).
+  // A game frame lost focus and blanked itself. If the whole page lost focus too, the player left;
+  // if not, they only clicked something on the arcade, so tell the game to show itself again.
   addEventListener('message', e => {
-    if (e.origin === location.origin && e.data && e.data.nebula === 'away') setTimeout(() => { if (!document.hasFocus()) toStudy(); }, 60);
+    if (e.origin !== location.origin || !e.data || e.data.nebula !== 'away') return;
+    setTimeout(() => {
+      if (!document.hasFocus()) toStudy();
+      else if (e.source) e.source.postMessage({ nebula: 'stay' }, location.origin);
+    }, 60);
   });
 })();
 
@@ -933,6 +940,8 @@ function setPanic(on) {
   panicked = on;
   if (on) { closePlayer(); showNotes($('subject').value); }
   else if (notesSubject) { clearTimeout(saveTimer); store(NOTES_KEY + notesSubject, $('notesText').value); }
+  // Leaving study mode: our games blank themselves when you switch away, so tell the open one to show again.
+  if (!on) { try { $('frame').contentWindow.postMessage({ nebula: 'stay' }, location.origin); } catch (_) {} }
   $('app').classList.toggle('hidden', on);
   $('panicFab').classList.toggle('hidden', on);
   $('decoy').classList.toggle('hidden', !on);

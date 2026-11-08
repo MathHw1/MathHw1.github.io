@@ -19,12 +19,22 @@
         if (window.top !== window) { try { window.parent.postMessage({ nebula: 'away' }, '*'); } catch (_) {} return; }
         location.replace(home);
     };
-    // The game blanks itself the moment it's hidden, so no preview of it is left behind on an iPad.
+    // The game blanks itself on the very first sign of leaving (blur, hide or pagehide), before an iPad
+    // takes its tab-switcher snapshot. It comes back if it turns out the player only clicked elsewhere
+    // on the page: focus returning, or the arcade saying 'stay'.
+    const blank = on => { document.documentElement.style.visibility = on ? 'hidden' : ''; };
     document.addEventListener('visibilitychange', () => {
-        document.documentElement.style.visibility = document.hidden ? 'hidden' : '';
+        blank(document.hidden);
         if (document.hidden) leave();
     });
-    addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) leave(); }, 150));
+    addEventListener('pagehide', () => blank(true));
+    addEventListener('focus', () => blank(false));
+    addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.nebula === 'stay') blank(false); });
+    addEventListener('blur', () => {
+        blank(true);
+        if (window.top !== window) { leave(); return; }          // the arcade decides, and says 'stay' if it was just a click
+        setTimeout(() => { if (document.hasFocus()) blank(false); else leave(); }, 150);
+    });
 })();
 
 const NebulaProfile = (function () {
