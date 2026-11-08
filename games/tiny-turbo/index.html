@@ -233,6 +233,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
 <div id="howto" class="screen scrim-full" hidden>
   <div class="card">
     <h2>How to Play</h2>
+    <p>Every course has a hazard: mud in Pine Valley, quicksand in Sunset Dunes, ice in Frost Peak and shock pads in Neon City. Use nitro in the first 3 seconds and you're frozen for 3.</p>
     <p class="touch-only">Hold ◀ ▶ to steer and ▲ to drive. Hold NITRO to drive with a boost. ▼ brakes. Tap ↺ if you get stuck, or ⏸ to pause.</p>
     <div class="keys kbd-only">
       <span><kbd>W</kbd> <kbd>↑</kbd></span><span>Gas</span>
@@ -371,16 +372,16 @@ const M=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.
 const MAPS=[
   {id:'valley',name:'Pine Valley',ctrl:[[0,0],[230,0],[340,40],[380,140],[330,235],[225,255],[170,325],[225,405],[205,490],[85,515],[-40,460],[-60,365],[-150,330],[-265,385],[-350,300],[-310,180],[-205,140],[-185,60],[-100,8]],
    sky:['#3d8fe0','#9fd2f2','#dff1fb'],fog:0xc9e6f5,fogNear:260,fogFar:950,grass:['#4f9c41','#479139'],road:['#3a3f4a','#383d47'],verge:'#c9b98a',wall:['#e8eaee','#d9342b'],
-   hemi:[0xdff1ff,0x3c6b2c,.75],sun:[0xfff3dc,.95],scenery:'pines'},
+   hemi:[0xdff1ff,0x3c6b2c,.75],sun:[0xfff3dc,.95],scenery:'pines',hazard:'mud'},
   {id:'dunes',name:'Sunset Dunes',ctrl:[[0,0],[260,0],[380,60],[400,200],[320,300],[180,280],[120,380],[200,470],[120,540],[-60,520],[-160,420],[-120,320],[-240,260],[-330,160],[-280,40],[-140,-10]],
    sky:['#e8794a','#f6c27a','#fde6b8'],fog:0xf3cf98,fogNear:240,fogFar:900,grass:['#d9b46a','#d1aa5e'],road:['#5a4a3c','#56473a'],verge:'#b98d4c',wall:['#f2e2c4','#c2552d'],
-   hemi:[0xffe9c4,0x9c7440,.8],sun:[0xffd59a,1],scenery:'cacti'},
+   hemi:[0xffe9c4,0x9c7440,.8],sun:[0xffd59a,1],scenery:'cacti',hazard:'sand'},
   {id:'frost',name:'Frost Peak',ctrl:[[0,0],[200,-20],[320,40],[340,160],[260,230],[300,330],[380,420],[300,520],[140,500],[60,400],[-40,460],[-180,520],[-320,440],[-330,300],[-220,220],[-280,120],[-200,20]],
    sky:['#7fb6e8','#cfe4f5','#f4f9fd'],fog:0xe2eef7,fogNear:200,fogFar:850,grass:['#eef4fa','#e3ecf5'],road:['#4a5463','#47505f'],verge:'#c9d6e3',wall:['#ffffff','#3b82f6'],
-   hemi:[0xeaf4ff,0x9fb3c8,.85],sun:[0xffffff,.9],scenery:'snow'},
+   hemi:[0xeaf4ff,0x9fb3c8,.85],sun:[0xffffff,.9],scenery:'snow',hazard:'ice'},
   {id:'neon',name:'Neon City',ctrl:[[0,0],[300,0],[360,60],[360,200],[300,250],[150,250],[100,300],[100,450],[40,510],[-200,510],[-260,450],[-260,320],[-320,260],[-380,200],[-380,60],[-320,0]],
    sky:['#05051a','#1b0b3a','#3b1060'],fog:0x1a0d33,fogNear:180,fogFar:800,grass:['#14142a','#17172f'],road:['#26283e','#23253a'],verge:'#2a1b4a',wall:['#ff2bd6','#22e3ff'],
-   hemi:[0x8a6cff,0x10081f,.6],sun:[0xc9b8ff,.55],scenery:'city'}
+   hemi:[0x8a6cff,0x10081f,.6],sun:[0xc9b8ff,.55],scenery:'city',hazard:'shock'}
 ];
 const N=1000,W=22,WALL=W/2+12;
 const P=[],T=[],NR=[],K=[];
@@ -412,6 +413,32 @@ function scenery(map){
   }
   base.count=placed;track.add(base);if(top){top.count=placed;track.add(top);}
 }
+
+// Each course has its own hazard on the road. They hit the rivals as well as you.
+//   slow: share of top speed you keep inside it.  grip: share of steering you keep (ice).
+//   stall: seconds the engine cuts out after touching it.  size: radius in metres.
+const HAZARDS={
+  mud:{name:'Mud',say:'🟤 Mud! Slowed down',colour:'#5b3a1d',edge:'#3b2410',size:5.5,slow:.42},
+  sand:{name:'Quicksand',say:'🏜️ Quicksand!',colour:'#d9a95a',edge:'#9c6d2a',size:6,slow:.33},
+  ice:{name:'Ice',say:'🧊 Ice! Slippery',colour:'#cfefff',edge:'#7cc7ee',size:8,grip:.25},
+  shock:{name:'Shock pad',say:'⚡ Shorted out!',colour:'#22e3ff',edge:'#ff2bd6',size:5,stall:1}
+};
+const HAZARD_COUNT=7;
+const hazards=[];   // { x, z, size, type }
+function placeHazards(map){
+  hazards.length=0;const h=HAZARDS[map.hazard];if(!h)return;
+  for(let k=0;k<HAZARD_COUNT;k++){
+    // Spread round the lap, clear of the start, and laid out the same way every time so online races match.
+    const i=Math.floor(90+(N-150)*(k+.5)/HAZARD_COUNT),lat=Math.sin(i*1.7+k)*W*.28;
+    const x=P[i].x+NR[i].x*lat,z=P[i].z+NR[i].z*lat;hazards.push({x,z,size:h.size,type:map.hazard});
+    const patch=new THREE.Mesh(new THREE.CircleGeometry(1,28),new THREE.MeshStandardMaterial({color:h.colour,roughness:map.hazard==='ice'?.08:.95,metalness:map.hazard==='ice'?.3:0,
+      emissive:map.hazard==='shock'?h.colour:'#000',emissiveIntensity:map.hazard==='shock'?.8:0,transparent:true,opacity:map.hazard==='ice'?.85:1}));
+    patch.rotation.x=-Math.PI/2;patch.rotation.z=headingAt(i);patch.scale.set(h.size,h.size*1.4,1);patch.position.set(x,.09,z);patch.receiveShadow=true;track.add(patch);
+    const ring=new THREE.Mesh(new THREE.RingGeometry(.92,1,28),new THREE.MeshBasicMaterial({color:h.edge}));
+    ring.rotation.copy(patch.rotation);ring.scale.copy(patch.scale);ring.position.set(x,.1,z);track.add(ring);
+  }
+}
+const hazardAt=c=>hazards.find(h=>{const dx=c.pos.x-h.x,dz=c.pos.z-h.z;return dx*dx+dz*dz<h.size*h.size*1.4;});
 
 // Builds a course from scratch, replacing whatever was there.
 function buildTrack(id){
@@ -489,6 +516,7 @@ function buildTrack(id){
     track.add(g);
   })();
   scenery(map);
+  placeHazards(map);
 
   /* coins & nitro canisters */
   coinGeo=coinGeo||new THREE.CylinderGeometry(1.1,1.1,.28,20);coinGeo.rotateX(Math.PI/2);
@@ -843,6 +871,13 @@ function lapDone(c){
 }
 function stepCar(c,inp,dt){
   const s=c.stats;let top=s.top*c.rb;
+  const hz=hazardAt(c),kind=hz&&HAZARDS[hz.type];
+  if(kind&&kind.stall&&c.lastHazard!==hz)c.stallUntil=raceT+kind.stall;   // only on the way in, so a slow car can't get stuck on a pad
+  if(c.stallUntil>raceT)inp={...inp,gas:false,nitro:false};          // shocked: no engine for a moment
+  if(kind&&kind.slow)top*=kind.slow;
+  const grip=kind&&kind.grip?kind.grip:1;
+  if(c.isPlayer&&kind&&c.lastHazard!==hz){flash(kind.say);}
+  c.lastHazard=hz;
   // An empty tank stays empty until you let go and it refills a little, so holding nitro can't keep
   // nudging out tiny boosts. It only refills while you're not pressing nitro.
   if(c.nitroEmpty&&!inp.nitro&&c.nitro>=NITRO_RESTART)c.nitroEmpty=false;
@@ -856,8 +891,9 @@ function stepCar(c,inp,dt){
   else if(inp.brake){if(c.speed>.5)c.speed-=55*dt;else c.speed=Math.max(-14,c.speed-18*dt);}
   else{const d=(5+Math.abs(c.speed)*.22)*dt;c.speed=Math.abs(c.speed)<=d?0:c.speed-Math.sign(c.speed)*d;}
   if(c.speed>top)c.speed=Math.max(top,c.speed-(c.offroad?45:20)*dt);
-  c.steer+=(inp.steer-c.steer)*Math.min(1,dt*8);
-  const av=Math.abs(c.speed);const turn=2.15*s.hand*(1-.4*Math.min(1,av/s.top));
+  c.steer+=(inp.steer-c.steer)*Math.min(1,dt*8*grip);
+  const av=Math.abs(c.speed);const turn=2.15*s.hand*grip*(1-.4*Math.min(1,av/s.top));
+  if(grip<1)c.h+=Math.sin(raceT*7+c.idx)*.5*dt*clamp(av/20,0,1);   // on ice the car slides about
   c.h+=c.steer*turn*dt*clamp(av/10,0,1)*Math.sign(c.speed||1);
   c.pos.x+=Math.sin(c.h)*c.speed*dt;c.pos.z+=Math.cos(c.h)*c.speed*dt;
   if(c.wallT>0)c.wallT-=dt;
