@@ -1310,6 +1310,64 @@ $('soundBtn').addEventListener('click', () => {
     if (save.sound) sound.start(); else sound.silence();
 });
 
+// ---------- Arcade shop drawer ----------
+// The same buying as the garage, offered in the arcade's 🛒 drawer.
+const VEHICLE_ICONS = { bike: '🏍️', car: '🚗', truck: '🛻' };
+function shopChanged() { store(); fillMenu(); if (screen === 'garage') fillGarage(); }
+NebulaShop.register({
+    title: 'Wheelie Life',
+    currency: { name: 'Cash', icon: '💵' },
+    coins: () => save.cash,
+    sections: () => [
+        { title: 'Vehicles', items: VEHICLES.map(v => {
+            const owned = save.owned.includes(v.id), riding = save.vehicle === v.id;
+            return { id: 'v:' + v.id, name: v.name, about: v.about, icon: VEHICLE_ICONS[v.kind], label: riding ? 'Riding' : owned ? 'Ride' : money(v.cost),
+                can: !riding && (owned || save.cash >= v.cost), done: riding };
+        }) },
+        { title: 'Upgrades', items: UPGRADES.map(u => {
+            const level = save.upgrades[u.id], cost = u.costs[level];
+            return { id: 'u:' + u.id, name: u.name, about: u.about, icon: '🔧', stats: ['Level ' + level + ' of ' + u.costs.length],
+                label: cost === undefined ? 'Maxed' : money(cost), can: cost !== undefined && save.cash >= cost, done: cost === undefined };
+        }) },
+        { title: 'Boosts for your next run', items: START_BOOSTS.map(b => ({
+            id: 'b:' + b.id, name: b.name, about: b.about, icon: b.id === 'shield' ? '🛡️' : '🔥', stats: ['You have ' + save.boosts[b.id]],
+            label: money(b.cost), can: save.cash >= b.cost
+        })) }
+    ],
+    buy(id) {
+        const [kind, key] = id.split(':');
+        if (kind === 'v') {
+            const v = VEHICLES.find(x => x.id === key);
+            if (!v) return { ok: false };
+            const owned = save.owned.includes(v.id);
+            if (!owned && save.cash < v.cost) return { ok: false, message: 'You need ' + money(v.cost - save.cash) + ' more.' };
+            if (!owned) { save.cash -= v.cost; save.owned.push(v.id); }
+            save.vehicle = v.id;
+            shopChanged();
+            return { ok: true, message: (owned ? 'Now riding the ' : 'Bought the ') + v.name + '!' };
+        }
+        if (kind === 'u') {
+            const u = UPGRADES.find(x => x.id === key), cost = u && u.costs[save.upgrades[u.id]];
+            if (!u || cost === undefined) return { ok: false, message: 'That’s fully upgraded.' };
+            if (save.cash < cost) return { ok: false, message: 'You need ' + money(cost - save.cash) + ' more.' };
+            save.cash -= cost;
+            save.upgrades[u.id]++;
+            shopChanged();
+            return { ok: true, message: u.name + ' is now level ' + save.upgrades[u.id] + '!' };
+        }
+        if (kind === 'b') {
+            const b = START_BOOSTS.find(x => x.id === key);
+            if (!b) return { ok: false };
+            if (save.cash < b.cost) return { ok: false, message: 'You need ' + money(b.cost - save.cash) + ' more.' };
+            save.cash -= b.cost;
+            save.boosts[b.id]++;
+            shopChanged();
+            return { ok: true, message: 'Bought a ' + b.name + '. It’s used on your next run.' };
+        }
+        return { ok: false };
+    }
+});
+
 resize();
 show('menu');
 requestAnimationFrame(frame);

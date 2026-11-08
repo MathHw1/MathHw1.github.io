@@ -324,6 +324,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
 <script src="../shared/profile.js"></script>
 <script src="../shared/ban.js"></script>
 <script src="../shared/scores.js"></script>
+<script src="../shared/shop.js"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
@@ -1410,6 +1411,32 @@ function loop(now){
   if(state==='race'||state==='finishing')drawGraph();
   renderer.render(scene,camera);
 }
+/* ---------------- arcade shop drawer ---------------- */
+// The same buying as the garage, offered in the arcade's 🛒 drawer. Parts change the car from the next race.
+const SHOP_ICONS={body:'🚗',spoiler:'🪽',decal:'🏁',upgrades:'🔧'};
+function shopChanged(){persist();refreshMenu();if(state==='garage'){rebuildPreview();renderStore();}}
+NebulaShop.register({
+  title:'Tiny Turbo',currency:{name:'Coins',icon:'🪙'},
+  coins:()=>save.coins,
+  sections:()=>TABS.map(([tabId,label])=>tabId==='upgrades'
+    ?{title:label,items:UPS.map(u=>{const lvl=save.up[u.id],price=lvl<3?UPCOST[lvl]:null;
+        return{id:'u:'+u.id,name:u.name,about:u.d,icon:SHOP_ICONS.upgrades,stats:['Level '+lvl+' of 3'],label:price==null?'Maxed':'🪙 '+price,can:price!=null&&save.coins>=price,done:price==null};})}
+    :{title:label,items:CAT[tabId].map(it=>{const owned=save.owned[tabId].includes(it.id),eq=save.eq[tabId]===it.id;
+        return{id:'c:'+tabId+':'+it.id,name:it.name,about:it.d||'',swatch:it.c,icon:SHOP_ICONS[tabId],label:eq?'Equipped':owned?'Use':'🪙 '+it.p,can:!eq&&(owned||save.coins>=it.p),done:eq};})}),
+  buy(id){
+    const parts=id.split(':');
+    if(parts[0]==='u'){const u=UPS.find(x=>x.id===parts[1]);if(!u)return{ok:false};const lvl=save.up[u.id],price=lvl<3?UPCOST[lvl]:null;
+      if(price==null)return{ok:false,message:u.name+' is fully upgraded.'};if(save.coins<price)return{ok:false,message:'You need '+(price-save.coins)+' more coins.'};
+      save.coins-=price;save.up[u.id]++;shopChanged();return{ok:true,message:u.name+' upgraded to level '+save.up[u.id]+'!'};}
+    const tabId=parts[1],it=CAT[tabId]&&CAT[tabId].find(x=>x.id===parts[2]);if(!it)return{ok:false};
+    const owned=save.owned[tabId].includes(it.id);
+    if(!owned&&save.coins<it.p)return{ok:false,message:'You need '+(it.p-save.coins)+' more coins.'};
+    if(!owned){save.coins-=it.p;save.owned[tabId].push(it.id);}
+    save.eq[tabId]=it.id;shopChanged();
+    const later=state==='race'||state==='countdown'||state==='paused'?' It’s on your car from the next race.':'';
+    return{ok:true,message:(owned?'Now using ':'Bought ')+it.name+'!'+later};
+  }
+});
 fillClasses();refreshMenu();setupGrid();camera.fov=60;NebulaProfile.ready.then(checkPerks);camera.updateProjectionMatrix();
 requestAnimationFrame(loop);
 online.tryResume();

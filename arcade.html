@@ -105,6 +105,7 @@
       <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
         <li><b>Tiny Turbo:</b> item boxes with slicks, homing orbs and boosts, look-back, wider tracks, tougher hazards, and jumps that need nitro.</li>
         <li><b>Study mode:</b> switching tabs or apps now opens your 📝 notes straight away, before an iPad grabs its tab preview.</li>
+        <li><b>Shop:</b> a 🛒 drawer for Wheelie Life and Tiny Turbo. Buy vehicles, parts, upgrades and boosts without leaving the game.</li>
         <li><b>Tiny Turbo:</b> ice now locks your steering for 3 seconds.</li>
         <li><b>Tiny Turbo:</b> course hazards only slow rivals 5% of the time, but your slicks and orbs always hit them, and theirs hit you.</li>
         <li><b>Tiny Turbo:</b> courses are about twice as long and twistier, three have cliff jumps, hazards hit harder and are harder to spot, and coins are fixed.</li>
@@ -970,6 +971,9 @@ applyFilters();
 // A game opened on its own comes here with #study when you switch away from it.
 if (location.hash === '#study') { history.replaceState(null, '', location.pathname); setPanic(true); }
 </script>
+
+<!-- 🛒 Shop drawer for games that have a shop (Wheelie Life, Tiny Turbo) -->
+<script src="games/shared/shop-drawer.js"></script>
 
 <!-- ================= ONLINE & VISITS COUNTERS ================= -->
 <!-- GitHub Pages can't count people itself, so two free public services do it:
