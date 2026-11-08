@@ -457,6 +457,9 @@ function renderNav() {
   const toStudy = () => { if (!navigating && !panicked) setPanic(true); };
   // Switch the moment the page hides, so an iPad's tab-switcher preview already shows the notes.
   document.addEventListener('visibilitychange', () => { if (document.hidden) toStudy(); });
+  document.addEventListener('freeze', toStudy);                // Chrome's Page Lifecycle API; Safari doesn't send it
+  // A four- or five-finger swipe or pinch is the iPad's app-switch gesture: switch before it finishes.
+  addEventListener('touchstart', e => { if (e.touches.length >= 4) toStudy(); }, { capture: true, passive: true });
   addEventListener('blur', () => {
     // Focus moving into a game frame isn't leaving. Anything else is, so switch straight away.
     const intoGame = document.activeElement && document.activeElement.tagName === 'IFRAME';

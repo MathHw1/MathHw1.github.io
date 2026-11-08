@@ -19,21 +19,68 @@
         if (window.top !== window) { try { window.parent.postMessage({ nebula: 'away' }, '*'); } catch (_) {} return; }
         location.replace(home);
     };
-    // The game blanks itself on the very first sign of leaving (blur, hide or pagehide), before an iPad
-    // takes its tab-switcher snapshot. It comes back if it turns out the player only clicked elsewhere
-    // on the page: focus returning, or the arcade saying 'stay'.
-    const blank = on => { document.documentElement.style.visibility = on ? 'hidden' : ''; };
+    // On the very first sign of leaving, the game is wiped out of sight before anything else runs, so an
+    // iPad's tab-switcher snapshot has nothing to show: every canvas is painted black, a full-screen mask
+    // goes on top, and the page is hidden. It all comes back if the player only clicked elsewhere on the
+    // page (focus returning, or the arcade saying 'stay'), with a forced redraw so nothing stays blank.
+    let masked = false;
+    // Asking a canvas for a context creates one, which would lock an unused canvas into the wrong kind.
+    // So note each context as the game makes it, and only wipe those.
+    const contexts = [];
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, options) {
+        const ctx = getContext.call(this, type, options);
+        if (ctx && !contexts.includes(ctx)) contexts.push(ctx);
+        return ctx;
+    };
+    function wipeCanvases() {
+        for (const ctx of contexts) {
+            try {
+                if (ctx.clearColor) { ctx.clearColor(0, 0, 0, 1); ctx.clear(ctx.COLOR_BUFFER_BIT | ctx.DEPTH_BUFFER_BIT); continue; }
+                const { width, height } = ctx.canvas;
+                ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, width, height); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height); ctx.restore();
+            } catch (_) {}
+        }
+    }
+    function mask() {
+        if (masked) return;
+        masked = true;
+        wipeCanvases();
+        let cover = document.getElementById('study-mode-mask');
+        if (!cover) {
+            cover = document.createElement('div');
+            cover.id = 'study-mode-mask';
+            cover.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:#fff';
+            (document.body || document.documentElement).appendChild(cover);
+        }
+        document.documentElement.style.visibility = 'hidden';
+    }
+    function unmask() {
+        if (!masked) return;
+        masked = false;
+        const cover = document.getElementById('study-mode-mask');
+        if (cover) cover.remove();
+        document.documentElement.style.visibility = '';
+        dispatchEvent(new Event('resize'));          // the games redraw everything on resize
+    }
+
     document.addEventListener('visibilitychange', () => {
-        blank(document.hidden);
-        if (document.hidden) leave();
+        if (document.hidden) { mask(); leave(); }
+        else unmask();
     });
-    addEventListener('pagehide', () => blank(true));
-    addEventListener('focus', () => blank(false));
-    addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.nebula === 'stay') blank(false); });
+    addEventListener('pagehide', mask);
+    document.addEventListener('freeze', mask);       // Chrome's Page Lifecycle API; Safari doesn't send it
+    addEventListener('pageshow', () => { if (!document.hidden && document.hasFocus()) unmask(); });
+    addEventListener('focus', unmask);
+    addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.nebula === 'stay') unmask(); });
+    // A four- or five-finger swipe or pinch is the iPad's app-switch gesture; normal play never uses that many.
+    const MANY_FINGERS = 4;
+    addEventListener('touchstart', e => { if (e.touches.length >= MANY_FINGERS) mask(); }, { capture: true, passive: true });
+    addEventListener('touchend', e => { if (masked && e.touches.length === 0) setTimeout(() => { if (document.hasFocus() && !document.hidden) unmask(); }, 300); }, { capture: true, passive: true });
     addEventListener('blur', () => {
-        blank(true);
+        mask();
         if (window.top !== window) { leave(); return; }          // the arcade decides, and says 'stay' if it was just a click
-        setTimeout(() => { if (document.hasFocus()) blank(false); else leave(); }, 150);
+        setTimeout(() => { if (document.hasFocus()) unmask(); else leave(); }, 150);
     });
 })();
 
