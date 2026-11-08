@@ -63,10 +63,18 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .tb.on{background:rgba(255,198,26,.35)}
 .tb.gas{height:90px;background:rgba(58,208,122,.25)}
 .tb.nos{background:rgba(255,106,43,.3)}
-body.touch .tb{width:clamp(68px,10vmin,92px);height:clamp(68px,10vmin,92px)}
-body.touch .tb.gas{height:clamp(90px,14vmin,124px)}
-body.touch .hud-bl{bottom:calc(136px + env(safe-area-inset-bottom,0px))}
-body.touch .hud-br{bottom:calc(146px + env(safe-area-inset-bottom,0px))}
+/* Touch screens: big thumb buttons, and only the readouts that matter while driving. */
+body.touch{--steer:clamp(92px,17vmin,150px);--pedal:clamp(104px,20vmin,170px)}
+body.touch #touch .grp{gap:14px}
+body.touch .tb{width:var(--steer);height:var(--steer);border-radius:24px;font-size:clamp(30px,5vmin,44px)}
+body.touch .tb.gas{width:var(--pedal);height:calc(var(--pedal) * 1.25)}
+body.touch .tb.nos{width:var(--pedal);height:var(--pedal);font-size:clamp(17px,3vmin,24px)}
+body.touch .tb[data-k=brake]{width:calc(var(--steer) * .8);height:calc(var(--steer) * .8)}
+body.touch .hud-bl{bottom:calc(var(--steer) + 26px + env(safe-area-inset-bottom,0px))}
+body.touch .hud-br{bottom:calc(var(--pedal) * 1.25 + 26px + env(safe-area-inset-bottom,0px))}
+body.touch .times,body.touch .board,body.touch .graph-plate,body.touch.racing #mute{display:none}
+body.touch #mph{font-size:40px}
+body.touch #mini{width:110px;height:110px}
 body.touch .kbd-only{display:none}
 .touch-only{display:none}
 body.touch .touch-only{display:block}
@@ -187,7 +195,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
   </div>
   <div class="hud-bl">
     <div class="plate speedo"><div id="mph" class="num">0</div><div class="lbl">MPH</div></div>
-    <div class="plate"><canvas id="graph" width="440" height="148"></canvas><div class="lbl">Speed · last 10 s</div></div>
+    <div class="plate graph-plate"><canvas id="graph" width="440" height="148"></canvas><div class="lbl">Speed · last 10 s</div></div>
   </div>
   <div class="hud-br">
     <div class="plate nitro-box"><div class="lbl">Nitro<span class="kbd-only"> · Shift</span></div><div class="nitro-bar"><div class="nitro-fill" id="hNitro"></div></div></div>
@@ -197,9 +205,9 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
 <div id="countdown" hidden></div>
 
 <div id="touch" hidden>
-  <div class="top"><button class="tsm" id="tPause" aria-label="Pause">⏸ Pause</button><button class="tsm" id="tReset" aria-label="Put car back on the track">↺ Back on track</button></div>
+  <div class="top"><button class="tsm" id="tPause" aria-label="Pause">⏸</button><button class="tsm" id="tReset" aria-label="Put car back on the track">↺</button></div>
   <div class="grp"><button class="tb" data-k="left" aria-label="Steer left">◀</button><button class="tb" data-k="right" aria-label="Steer right">▶</button></div>
-  <div class="grp"><button class="tb nos" data-k="nitro">N₂O</button><button class="tb" data-k="brake" aria-label="Brake">▼</button><button class="tb gas" data-k="gas" aria-label="Gas">▲</button></div>
+  <div class="grp"><button class="tb" data-k="brake" aria-label="Brake">▼</button><button class="tb nos" data-k="nitro" aria-label="Nitro boost">🔥<br>NITRO</button><button class="tb gas" data-k="gas" aria-label="Gas">▲</button></div>
 </div>
 
 <div id="menu" class="screen scrim">
@@ -220,7 +228,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
 <div id="howto" class="screen scrim-full" hidden>
   <div class="card">
     <h2>How to Play</h2>
-    <p class="touch-only">Hold ◀ ▶ to steer, ▲ for gas, ▼ to brake and N₂O for nitro. Tap Back on track if you get stuck.</p>
+    <p class="touch-only">Hold ◀ ▶ to steer and ▲ to drive. Hold NITRO to drive with a boost. ▼ brakes. Tap ↺ if you get stuck, or ⏸ to pause.</p>
     <div class="keys kbd-only">
       <span><kbd>W</kbd> <kbd>↑</kbd></span><span>Gas</span>
       <span><kbd>S</kbd> <kbd>↓</kbd></span><span>Brake / reverse</span>
@@ -712,7 +720,7 @@ document.querySelectorAll('#touch .tb').forEach(b=>{const k=b.dataset.k;
   b.addEventListener('pointerdown',e=>{on(e);try{b.setPointerCapture(e.pointerId);}catch(_){}});b.addEventListener('pointerup',off);b.addEventListener('pointercancel',off);b.addEventListener('contextmenu',e=>e.preventDefault());});
 const isTouch=matchMedia('(pointer: coarse)').matches||navigator.maxTouchPoints>0;
 if(isTouch)document.body.classList.add('touch');
-function playerInput(){const g=k=>keys[k]||tkeys[k];return{gas:g('gas'),brake:g('brake'),steer:(g('left')?1:0)-(g('right')?1:0),nitro:g('nitro')};}
+function playerInput(){const g=k=>keys[k]||tkeys[k];return{gas:g('gas')||tkeys.nitro,brake:g('brake'),steer:(g('left')?1:0)-(g('right')?1:0),nitro:g('nitro')};}
 
 /* ---------------- physics ---------------- */
 function resetCar(c){const i=c.idx;c.pos.set(P[i].x,0,P[i].z);c.h=headingAt(i);c.speed=0;c.steer=0;c.stuck=0;}
