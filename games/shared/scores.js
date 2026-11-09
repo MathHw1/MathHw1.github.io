@@ -108,7 +108,8 @@ const NebulaScores = (function () {
     }
 
     function askName(onDone, onCancel) {
-        showTouchKeyboard({ title: 'Pick a username. Everyone can see it.', value: NebulaProfile.name(), maxLength: 12, picks: NAME_PICKS, okLabel: 'Save name', onCancel,
+        const have = (NebulaProfile.name() || '').trim();
+        showTouchKeyboard({ title: have ? 'Welcome back! Keep this username, or change it.' : 'Pick a username. Everyone can see it.', value: NebulaProfile.name(), maxLength: 12, picks: NAME_PICKS, okLabel: have ? 'That’s me' : 'Save name', onCancel,
             onDone(name) { NebulaProfile.setName(name); onDone(name); } });
     }
 

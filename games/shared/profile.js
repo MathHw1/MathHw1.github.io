@@ -103,8 +103,20 @@ const NebulaProfile = (function () {
     const OLD_NAME_KEY = 'nebula-player-name';
     const DB_NAME = 'nebula-arcade', DB_STORE = 'saves';
 
+    // The profile is kept in several places at once (localStorage, sessionStorage, IndexedDB, and the
+    // device ID and username in a cookie), so if a browser or an app's built-in browser clears one, the
+    // others bring it back. The page reads whichever survived.
+    const COOKIE = 'nebula-id', COOKIE_DAYS = 400;
+    function fromCookie() {
+        const m = document.cookie.match(new RegExp('(?:^|; )' + COOKIE + '=([^;]*)'));
+        if (!m) return null;
+        try { const [deviceId, name] = JSON.parse(decodeURIComponent(m[1])); return deviceId ? { deviceId, name: name || '', stats: {} } : null; } catch (_) { return null; }
+    }
     function load() {
-        try { return JSON.parse(localStorage.getItem(KEY)); } catch (_) { return null; }
+        for (const store of [() => localStorage, () => sessionStorage]) {
+            try { const saved = JSON.parse(store().getItem(KEY)); if (saved) return saved; } catch (_) {}
+        }
+        return null;
     }
     function fresh() {
         let name = '';
@@ -113,7 +125,7 @@ const NebulaProfile = (function () {
     }
 
     const hadSave = !!load();
-    let profile = load() || fresh();
+    let profile = load() || fromCookie() || fresh();
 
     function openDb() {
         return new Promise((resolve, reject) => {
@@ -130,7 +142,13 @@ const NebulaProfile = (function () {
         }).catch(() => {});
     }
     function save() {
-        try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch (_) {}
+        const text = JSON.stringify(profile);
+        try { localStorage.setItem(KEY, text); } catch (_) {}
+        try { sessionStorage.setItem(KEY, text); } catch (_) {}
+        try {
+            document.cookie = COOKIE + '=' + encodeURIComponent(JSON.stringify([profile.deviceId, profile.name])) +
+                '; max-age=' + COOKIE_DAYS * 86400 + '; path=/; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+        } catch (_) {}
         backUp();
     }
 
@@ -139,7 +157,11 @@ const NebulaProfile = (function () {
         const read = db.transaction(DB_STORE).objectStore(DB_STORE).get(KEY);
         read.onsuccess = () => {
             db.close();
-            try { if (read.result) profile = JSON.parse(read.result); } catch (_) {}
+            try {
+                const backup = read.result && JSON.parse(read.result);
+                // The IndexedDB copy has the stats too, so it wins, but a name from the cookie fills a blank one.
+                if (backup) profile = { ...backup, name: backup.name || profile.name };
+            } catch (_) {}
             resolve();
         };
         read.onerror = () => { db.close(); resolve(); };

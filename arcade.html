@@ -105,6 +105,8 @@
     <details class="mb-3 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-4 sm:px-5 py-3">
       <summary class="cursor-pointer select-none font-semibold text-violet-200">🛠️ Bugs &amp; fixes</summary>
       <ul class="mt-3 space-y-2 text-sm text-slate-300 list-disc pl-5">
+        <li><b>New games:</b> Fort Zone, Tiny Fishing and A Small World Cup.</li>
+        <li><b>Usernames:</b> the arcade asks for your username (or to confirm it) when you open it, and remembers it in more places so it survives app switches and cleared storage.</li>
         <li><b>Tiny Turbo:</b> the Blue Star Shell (last place gets one per race, and it hunts down 1st), rivals that spread out and chase the leader, every racer on the mini-map, solid friends' cars, and correct places in online races.</li>
         <li><b>Usernames:</b> our own games ask for a username before you play, so your scores and lobbies always show your name.</li>
         <li><b>iPad:</b> tapping or dragging around a game no longer highlights the page in blue or pops up the copy menu. Aqua Park IO has a new working link.</li>
@@ -402,6 +404,30 @@ const GAMES = [
     embed: 'https://www.worldguessr.com/' 
   },
   { 
+    title: 'Fort Zone',   
+    genre: 'Action',   
+    source: 'embed', 
+    desc: 'Battle royale: drop in, build, and be the last one standing.', 
+    img: 'games/fortzone/cover.jpg', 
+    embed: 'https://game.fortzone.games/fortzone/index.html' 
+  },
+  { 
+    title: 'Tiny Fishing',   
+    genre: 'Puzzle',   
+    source: 'embed', 
+    desc: 'Cast your line deep, reel in fish, and upgrade your rod.', 
+    img: 'games/tiny-fishing/cover.jpg', 
+    embed: 'https://tinyfishingame.com/play/tiny-fishing/' 
+  },
+  { 
+    title: 'A Small World Cup',   
+    genre: 'Sports',   
+    source: 'embed', 
+    desc: 'Wobbly one-button soccer: win the cup for your country.', 
+    img: 'games/a-small-world-cup/cover.jpg', 
+    embed: 'https://asmallworldcup.com/' 
+  },
+  { 
     title: 'Basketball Random',   
     genre: 'Sports',   
     source: 'embed', 
@@ -572,7 +598,7 @@ $('grid').addEventListener('click', async e => {
   if (!card) return;
   const g = GAMES[card.dataset.play];
   // Our own games need a username first (for leaderboards and lobbies). Pick one, then the game opens.
-  if (g.url && !(NebulaProfile.name() || '').trim()) { NebulaScores.requireName(() => card.click()); return; }
+  if (!(NebulaProfile.name() || '').trim()) { NebulaScores.requireName(() => card.click()); return; }
   current = g;
   try { getSelection().removeAllRanges(); } catch (_) {}
 
@@ -978,6 +1004,7 @@ function setPanic(on) {
   if (!on) { try { $('frame').contentWindow.postMessage({ nebula: 'stay' }, location.origin); } catch (_) {} }
   $('app').classList.toggle('hidden', on);
   $('panicFab').classList.toggle('hidden', on);
+  document.querySelectorAll('.tk-screen').forEach(screen => { screen.style.display = on ? 'none' : ''; });   // e.g. the username box
   $('decoy').classList.toggle('hidden', !on);
   document.body.style.background = on ? '#ffffff' : '';
   document.title = on ? notesSubject + ' Notes' : ARCADE.title;
@@ -1004,6 +1031,24 @@ if (location.hash === '#study') { history.replaceState(null, '', location.pathna
 
 <!-- 🛒 Shop drawer for games that have a shop (Wheelie Life, Tiny Turbo) -->
 <script src="games/shared/shop-drawer.js"></script>
+<script>
+// Everyone picks or confirms a username as the arcade opens, once per visit, before playing anything.
+// Returning players find their name already filled in, so it's one tap.
+(function () {
+  const CONFIRMED = 'nebula-name-confirmed';
+  let confirmed = false;
+  try { confirmed = sessionStorage.getItem(CONFIRMED) === 'yes'; } catch (_) {}
+  NebulaProfile.ready.then(() => {
+    if (confirmed && (NebulaProfile.name() || '').trim()) return;
+    const ask = () => NebulaScores.askName(name => {
+      if (!(name || '').trim()) { ask(); return; }
+      try { sessionStorage.setItem(CONFIRMED, 'yes'); } catch (_) {}
+    }, ask);
+    ask();
+    if (panicked) document.querySelectorAll('.tk-screen').forEach(screen => { screen.style.display = 'none'; });
+  });
+})();
+</script>
 
 <!-- ================= ONLINE & VISITS COUNTERS ================= -->
 <!-- GitHub Pages can't count people itself, so two free public services do it:
