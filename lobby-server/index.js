@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { Server } = require('socket.io');
 const { isRude } = require('./name-filter');
+const { createStore } = require('./store');
 
 const PORT = process.env.PORT || 3000;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://mathhw1.github.io').split(',').map(s => s.trim());
@@ -32,8 +33,9 @@ const graceFor = room => TEST_GRACE_MS || GRACE_MS[room.game];
 const WAITING_ROOM_MS = 30 * 60000;            // a lobby nobody joined closes after this
 const CLEANUP_MS = TEST_GRACE_MS ? Math.min(5000, TEST_GRACE_MS / 2) : 5000;
 
-// The leaderboards live in memory, and free hosts wipe that when they sleep. Each player's browser
-// keeps their own bests and sends them again on every visit, so the boards fill back up by themselves.
+// The leaderboards live in memory, and are saved to a database when DATABASE_URL is set (see store.js).
+// Without one, free hosts wipe them when they sleep, but each player's browser keeps their own bests and
+// sends them again on every visit, so the boards fill back up by themselves.
 // lower: true means the smallest value wins, as with fastest times.
 const BOARDS = {
     'wheelie:score': {}, 'wheelie:level': {}, 'wheelie:miles': {}, 'wheelie:time': { lower: true },
@@ -60,6 +62,7 @@ const nameBanned = name => typeof name === 'string' && bannedNames.has(name.trim
 function banDevice(deviceId) {
     bannedDevices.add(deviceId);
     unbannedDevices.delete(deviceId);
+    store.changed();
 }
 // Devices seen lately, so the owner panel can list players. Kept in memory only, newest last.
 const seenDevices = new Map();     // deviceId -> { name, game, at }
@@ -72,6 +75,27 @@ function noteDevice(deviceId, name, game) {
     seenDevices.delete(deviceId);
     seenDevices.set(deviceId, { name: name || 'PLAYER', game, at: Date.now() });
     if (seenDevices.size > MAX_SEEN) seenDevices.delete(seenDevices.keys().next().value);
+    // Not saved on its own (pages check in every 15 s), just along with the next real change.
+}
+
+// What gets saved to the database, and putting it back when the server starts.
+const store = createStore();
+function snapshot() {
+    return {
+        scores: Object.fromEntries(scores), banned: [...bannedDevices], unbanned: [...unbannedDevices],
+        bannedNames: [...bannedNames], perks: [...perks], seen: [...seenDevices]
+    };
+}
+function restore(saved) {
+    if (!saved) return;
+    for (const [board, list] of Object.entries(saved.scores || {})) {
+        if (scores.has(board) && Array.isArray(list)) { scores.get(board).push(...list); sortBoard(board); }
+    }
+    for (const id of saved.banned || []) bannedDevices.add(id);
+    for (const id of saved.unbanned || []) unbannedDevices.add(id);
+    for (const name of saved.bannedNames || []) bannedNames.add(name);
+    for (const [id, extras] of saved.perks || []) perks.set(id, extras);
+    for (const [id, info] of saved.seen || []) seenDevices.set(id, info);
 }
 const submits = new Map();         // address -> { count, resetAt }
 
@@ -274,12 +298,15 @@ app.post('/scores', express.json({ limit: '1kb' }), (req, res) => {
 
     // One line per device, keeping its best. The newest name replaces the old one.
     const list = scores.get(board), lower = BOARDS[board].lower, mine = list.find(entry => entry.deviceId === deviceId);
+    // Pages send their bests again on every visit, so only save when something is actually new.
+    let changed = !mine;
     if (!mine) list.push({ deviceId, name: clean, score });
     else {
-        mine.name = clean;
-        if (lower ? score < mine.score : score > mine.score) mine.score = score;
+        if (mine.name !== clean) { mine.name = clean; changed = true; }
+        if (lower ? score < mine.score : score > mine.score) { mine.score = score; changed = true; }
     }
     sortBoard(board);
+    if (changed) store.changed();
     res.json({ scores: topScores(board), rank: list.findIndex(entry => entry.deviceId === deviceId) + 1 });
 });
 
@@ -358,6 +385,7 @@ app.post('/admin/:action', express.json({ limit: '1kb' }), (req, res) => {
         if (seen) bannedNames.delete(seen.name);
     }
     else return res.sendStatus(404);
+    store.changed();
     res.json(adminView());
 });
 
@@ -474,4 +502,13 @@ setInterval(() => {
     }
 }, CLEANUP_MS);
 
-server.listen(PORT, () => console.log('Lobby server listening on port ' + PORT + ', allowing ' + ALLOWED_ORIGINS.join(', ')));
+// Read the saved boards first, so nobody sees them empty or overwrites them.
+store.load(snapshot).then(saved => {
+    restore(saved);
+    if (store.enabled) console.log('Database connected: ' + (saved ? 'boards, bans and perks restored.' : 'nothing saved yet.'));
+    server.listen(PORT, () => console.log('Lobby server listening on port ' + PORT + ', allowing ' + ALLOWED_ORIGINS.join(', ')));
+});
+// Hosts send SIGTERM before stopping or redeploying the server: save the latest changes first.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+    process.once(signal, () => { store.flush().finally(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); });
+}

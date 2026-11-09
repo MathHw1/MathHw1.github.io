@@ -29,6 +29,18 @@ Render handles HTTPS, so players connect with `wss://` on port 443.
 | `ALLOWED_ORIGINS` | `https://mathhw1.github.io` | Sites allowed to connect, separated by commas. |
 | `PORT` | `3000` | Render sets this itself. |
 | `TRANSPORTS` | `websocket,polling` | Set to `polling` to test a network that blocks WebSockets. |
+| `ADMIN_PASSWORD` | none | Turns on the owner panel. Set it in Render only, never in the code. |
+| `DATABASE_URL` | none | A Postgres connection string. Saves the boards, bans and perks so restarts don't wipe them. Without it, everything lives in memory. |
+
+## Keep the boards forever
+
+The free Render server forgets everything when it sleeps. To keep leaderboards, bans and perks:
+
+1. Make a free Postgres database at [neon.tech](https://neon.tech) and copy its connection string (it starts with `postgresql://`).
+2. In Render, open the lobby server, go to **Environment**, add `DATABASE_URL`, and paste the string as its value.
+3. Save. Render restarts the server, and its log says `Database connected`.
+
+The server makes its own table (`nebula_state`) and saves a few seconds after anything changes.
 
 ## Test on your computer
 
