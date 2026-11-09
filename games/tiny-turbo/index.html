@@ -265,7 +265,7 @@ body.racing #mute{bottom:auto;top:calc(220px + env(safe-area-inset-top,0px))}
 <div id="online" class="screen scrim-full" hidden>
   <div class="card">
     <h2>Race Friends</h2>
-    <p>Up to 6 players race on the same track, at the host's speed class. Friends show up as see-through ghost cars that can't hit you.</p>
+    <p>Up to 6 players race on the same track, at the host's speed class. Friends' cars show in their own colours and can't bump you.</p>
     <div id="olStart" class="row"><button class="btn primary sm" id="olCreate">Create a lobby</button><button class="btn sm" id="olJoin">Join with a code</button></div>
     <div id="olWait" hidden>
       <div id="olCode"></div>
@@ -520,11 +520,14 @@ function startFall(c,j){
 // Rows of boxes across the road. Grab one and you hold an item until you use it. What you get depends
 // on your place: leaders mostly get slicks to defend with, the back of the pack gets orbs and boosts.
 const ITEM_ZONES=[.2,.42,.64,.86],ITEM_RESPAWN=3,BOXES_PER_ZONE=6;
-const ITEMS={slick:{icon:'🛢️',name:'Slick'},orb:{icon:'🔮',name:'Homing orb'},boost:{icon:'⚡',name:'Boost'}};
+const ITEMS={slick:{icon:'🛢️',name:'Slick'},orb:{icon:'🔮',name:'Homing orb'},boost:{icon:'⚡',name:'Boost'},star:{icon:'⭐',name:'Blue Star Shell'}};
+// The Blue Star Shell: whoever is in last place gets one from their next item box, at most once a race.
+// It flies straight to the racer in 1st and spins them out for longer than an orb does.
+const STAR_SPEED=130,STAR_LIFE=25,STAR_SPIN=2.6;
 const ODDS=[{slick:.8,orb:.1,boost:.1},{slick:.45,orb:.35,boost:.2},{slick:.1,orb:.5,boost:.4}];   // 1st, 2nd–3rd, 4th–6th
 const itemBoxes=[],slicks=[],orbs=[];
 const SLICK_REACH=3.4;    // the puddle's size plus half a car, so driving over any part of it counts
-let boxMat=null,boxGeo=null,slickGeo=null,slickMat=null,orbGeo=null,orbMat=null;
+let boxMat=null,boxGeo=null,slickGeo=null,slickMat=null,orbGeo=null,orbMat=null,starGeo=null,starMat=null;
 function placeItemBoxes(){
   itemBoxes.length=0;slicks.length=0;orbs.length=0;
   if(!boxGeo){
@@ -533,6 +536,7 @@ function placeItemBoxes(){
     boxGeo=new THREE.BoxGeometry(2,2,2);boxMat=new THREE.MeshStandardMaterial({map:new THREE.CanvasTexture(c),emissive:'#ff9a1f',emissiveIntensity:.45,transparent:true,opacity:.92});
     slickGeo=new THREE.CircleGeometry(2.2,20);slickMat=new THREE.MeshStandardMaterial({color:'#15121a',roughness:.05,metalness:.6});
     orbGeo=new THREE.SphereGeometry(.9,14,10);orbMat=new THREE.MeshStandardMaterial({color:'#b26bff',emissive:'#8a3dff',emissiveIntensity:1.2});
+    starGeo=new THREE.OctahedronGeometry(1.5);starMat=new THREE.MeshStandardMaterial({color:'#3d7bff',emissive:'#1f5bff',emissiveIntensity:1.6});
   }
   for(const f of ITEM_ZONES){
     let i=Math.floor(f*N);while(jumpNear(i)||jumps.some(j=>i>j.rampStart-30&&i<j.end+15))i=(i+25)%N;
@@ -552,7 +556,9 @@ addEventListener('nebula-perks',e=>{perks=e.detail;applyPerks();});   // ban.js 
 
 function placeOf(c){const order=rankCars();return order.indexOf(c)+1;}
 function rollItem(c){
-  const place=online.on?3:placeOf(c),odds=ODDS[place<=1?0:place<=3?1:2];let r=Math.random();
+  const order=standings(),place=order.findIndex(e=>e.car===c)+1;
+  if(order.length>1&&place===order.length&&!c.starGiven){c.starGiven=true;return 'star';}
+  const odds=ODDS[place<=1?0:place<=3?1:2];let r=Math.random();
   for(const k of ['slick','orb','boost']){r-=odds[k];if(r<=0)return k;}
   return 'boost';
 }
@@ -574,10 +580,21 @@ function useItem(c,back){
     const m=new THREE.Mesh(orbGeo,orbMat);m.position.set(c.pos.x+d.x*(back?-4:4),1.2,c.pos.z+d.z*(back?-4:4));track.add(m);
     orbs.push({m,owner:c,target:orbTarget(c,back),dir:back?{x:-d.x,z:-d.z}:d,born:raceT});
   }
+  else if(it==='star'){
+    const target=leaderTarget(c),m=new THREE.Mesh(starGeo,starMat);m.position.set(c.pos.x,3,c.pos.z);track.add(m);
+    orbs.push({m,owner:c,target,dir:d,born:raceT,star:true});
+    if(c.isPlayer)flash('⭐ Blue Star Shell is after 1st place!');
+  }
   else{c.nitro=1;c.nitroEmpty=false;c.itemBoost=raceT+1.6;}
   if(c.isPlayer){beep(it==='boost'?880:520,.12,'square',.12);updateItemHud();}
 }
-// The nearest racer ahead (or behind) in the race, or a friend's ghost in an online race.
+// Whoever is in 1st place, other than the car firing.
+function leaderTarget(c){
+  const lead=standings().find(e=>e.car!==c&&!e.done);
+  if(!lead)return null;
+  return lead.car?{car:lead.car}:{ghost:lead.seat};
+}
+// The nearest racer ahead (or behind) in the race, or a friend's car in an online race.
 function orbTarget(c,back){
   if(online.on){
     let best=null,bd=1e9;for(const [seat,g] of online.ghosts){const dx=g.mesh.position.x-c.pos.x,dz=g.mesh.position.z-c.pos.z,ahead=dx*Math.sin(c.h)+dz*Math.cos(c.h);
@@ -612,11 +629,13 @@ function itemsStep(dt){
     if(o.target&&o.target.car){tx=o.target.car.pos.x;tz=o.target.car.pos.z;}
     else if(o.target&&o.target.ghost!==undefined){const g=online.ghosts.get(o.target.ghost);if(g){tx=g.mesh.position.x;tz=g.mesh.position.z;}}
     if(tx!==null){const dx=tx-p.x,dz=tz-p.z,d=Math.hypot(dx,dz)||1;o.dir={x:dx/d,z:dz/d};}
-    const sp=Math.max(95,(o.target&&o.target.car?Math.abs(o.target.car.speed):60)+35);
-    p.x+=o.dir.x*sp*dt;p.z+=o.dir.z*sp*dt;let gone=raceT-o.born>6;
-    if(tx!==null&&Math.hypot(tx-p.x,tz-p.z)<2.6){gone=true;
-      if(o.target.car)spinOut(o.target.car,1.8);
-      else if(online.on)online.lobby.send({t:'hit',s:o.target.ghost});}
+    const chase=(o.target&&o.target.car?Math.abs(o.target.car.speed):60);
+    const sp=o.star?Math.max(STAR_SPEED,chase+70):Math.max(95,chase+35);
+    p.x+=o.dir.x*sp*dt;p.z+=o.dir.z*sp*dt;let gone=raceT-o.born>(o.star?STAR_LIFE:6);
+    if(o.star){o.m.rotation.y+=dt*8;o.m.position.y=2.4+Math.sin(raceT*10)*.4;}
+    if(tx!==null&&Math.hypot(tx-p.x,tz-p.z)<(o.star?3.2:2.6)){gone=true;
+      if(o.target.car){spinOut(o.target.car,o.star?STAR_SPIN:1.8);if(o.star&&o.target.car.isPlayer)flash('⭐ Hit by a Blue Star Shell!');}
+      else if(online.on)online.lobby.send({t:'hit',s:o.target.ghost,star:!!o.star});}
     if(gone){track.remove(o.m);orbs.splice(k,1);}
   }
   // Rivals use what they hold.
@@ -624,6 +643,7 @@ function itemsStep(dt){
     if(c.isPlayer||!c.item||c.fall||c.air)continue;const held=raceT-c.itemAt;
     if(c.item==='boost'&&(held>4||jumps.some(j=>c.idx>=j.rampStart-50&&c.idx<j.start)))useItem(c,false);
     else if(c.item==='orb'&&(orbTarget(c,false)&&held>1.5||held>8))useItem(c,false);
+    else if(c.item==='star'&&held>1)useItem(c,false);
     else if(c.item==='slick'){const behind=cars.some(o=>o!==c&&Math.hypot(o.pos.x-c.pos.x,o.pos.z-c.pos.z)<20&&(o.pos.x-c.pos.x)*Math.sin(c.h)+(o.pos.z-c.pos.z)*Math.cos(c.h)<0);if(behind||held>7)useItem(c,true);}
   }
 }
@@ -838,7 +858,7 @@ $('mute').onclick=()=>{initAudio();setMute(!save.muted);};
 setMute(save.muted);
 
 /* ---------------- online ---------------- */
-const GHOST_OPACITY=.38,SEND_EVERY=.1,GHOST_FOLLOW=12;
+const SEND_EVERY=.1,GHOST_FOLLOW=12;
 const NEW_STATS={races:0,wins:0,losses:0};
 function recordRace(){
   const stats=NebulaProfile.stats('racing',NEW_STATS);const won=finishOrder.indexOf(player)===0;
@@ -846,10 +866,10 @@ function recordRace(){
   const reply=NebulaScores.record(boardFor(),player.finishTime*1000);if(reply)reply.catch(()=>{});
   if(online.on)online.finished(player.finishTime);
 }
-// Friends' cars: see-through, grey, and left out of every collision.
+// Friends' cars: solid and in their own colours, but left out of every collision.
+const paintOf=cfg=>(CAT.paint.find(p=>p.id===cfg.paint)||{}).c||(/^#[0-9a-f]{3,8}$/i.test(cfg.paint||'')?cfg.paint:'#94a3b8');
 function ghostMesh(cfg){
-  const mesh=buildCar({...cfg,paint:'#94a3b8',decal:'none'});
-  mesh.traverse(o=>{if(!o.material)return;o.material=o.material.clone();o.material.transparent=true;o.material.opacity=GHOST_OPACITY;o.material.depthWrite=false;o.castShadow=false;});
+  const mesh=buildCar(cfg);
   scene.add(mesh);return mesh;
 }
 const online={
@@ -925,12 +945,12 @@ const online={
     if(!msg)return;
     if(msg.t==='slick'&&Number.isFinite(msg.x)&&Number.isFinite(msg.z)&&slicks.length<60){const m=new THREE.Mesh(slickGeo,slickMat);m.rotation.x=-Math.PI/2;m.position.set(msg.x,.12,msg.z);track.add(m);const i=nearestPoint(msg.x,msg.z);slicks.push({m,x:msg.x,z:msg.z,i,lat:lateralOf(i,msg.x,msg.z),size:2.6,owner:null,born:raceT,id:String(msg.id)});return;}
     if(msg.t==='slickGone'){const k=slicks.findIndex(sl=>sl.id===String(msg.id));if(k>=0){track.remove(slicks[k].m);slicks.splice(k,1);}return;}
-    if(msg.t==='hit'&&msg.s===this.lobby.seat&&player){spinOut(player,1.8);return;}
+    if(msg.t==='hit'&&msg.s===this.lobby.seat&&player){spinOut(player,msg.star?STAR_SPIN:1.8);if(msg.star)flash('⭐ Hit by a Blue Star Shell!');return;}
     if(msg.t==='go'&&Array.isArray(msg.racers)){if(msg.racers.includes(this.lobby.seat)){raceClass=CLASSES.find(k=>k.id===msg.cls)||CLASSES[1];if(MAPS.some(m=>m.id===msg.map)&&msg.map!==currentMap.id)buildTrack(msg.map);fillClasses();this.begin(msg.racers);}}
     else if(msg.t==='pos'&&Number.isInteger(msg.s)&&Number.isFinite(msg.x)&&Number.isFinite(msg.z)&&Number.isFinite(msg.h)){
       let ghost=this.ghosts.get(msg.s);
-      if(!ghost){ghost={mesh:ghostMesh(msg.cfg||{}),h:msg.h};ghost.mesh.add(nameTag(this.nameOf(msg.s)));ghost.mesh.position.set(msg.x,0,msg.z);this.ghosts.set(msg.s,ghost);}
-      ghost.x=msg.x;ghost.z=msg.z;ghost.h=msg.h;
+      if(!ghost){const cfg=msg.cfg||{};ghost={mesh:ghostMesh(cfg),h:msg.h,color:paintOf(cfg),prog:-1e9};ghost.mesh.add(nameTag(this.nameOf(msg.s),ghost.color));ghost.mesh.position.set(msg.x,0,msg.z);this.ghosts.set(msg.s,ghost);}
+      ghost.x=msg.x;ghost.z=msg.z;ghost.h=msg.h;if(Number.isFinite(msg.prog))ghost.prog=msg.prog;
     }
     else if(msg.t==='done'&&Number.isInteger(msg.s)){
       this.dropGhost(msg.s);this.results.set(msg.s,Number(msg.time)||0);
@@ -951,7 +971,7 @@ const online={
     this.sendIn-=dt;
     if(this.sendIn<=0&&player&&state==='race'&&!player.finished){
       this.sendIn=SEND_EVERY;
-      this.lobby.sendLive({t:'pos',s:this.lobby.seat,x:player.pos.x,z:player.pos.z,h:player.h,cfg:player.cfg});
+      this.lobby.sendLive({t:'pos',s:this.lobby.seat,x:player.pos.x,z:player.pos.z,h:player.h,prog:player.prog,cfg:player.cfg});
     }
     return held;
   },
@@ -1031,11 +1051,13 @@ function makeCar(cfg,name,isPlayer,skill,colorHex){
 function setupGrid(){
   for(const c of cars)scene.remove(c.mesh);cars=[];finishOrder=[];
   const order=online.on?Array.from({length:6},(_,k)=>k===online.lobby.seat?'me':'skip'):['ai','ai','ai','ai','ai','me'];let ai=0;   // you start at the back
+  // Each rival gets its own favourite line and a slightly different top speed, so the pack spreads out.
+  const homes=[-.22,.22,-.08,.08,0].map(f=>f*W).sort(()=>Math.random()-.5);
   order.forEach((who,k)=>{
     if(who==='skip')return;
     const row=Math.floor(k/2),col=k%2;const idx=N-12-row*16;const lat=col?-7:7;   // 3 rows of 2, well spaced
     let c;if(who==='me'){c=makeCar(playerCfg(),'You',true,1,(CAT.paint.find(p=>p.id===save.eq.paint)||{}).c);player=c;}
-    else{const a=AIS[ai++];c=makeCar({paint:a.paint,body:a.body,spoiler:a.spoiler,rim:'silver',decal:a.decal,number:ai*11},a.name,false,a.skill,a.paint);c.stats.top*=1;}
+    else{const a=AIS[ai];c=makeCar({paint:a.paint,body:a.body,spoiler:a.spoiler,rim:'silver',decal:a.decal,number:(ai+1)*11},a.name,false,a.skill,a.paint);c.laneHome=homes[ai];c.pace=.96+Math.random()*.08;ai++;}
     c.idx=idx;c.pos.set(P[idx].x+NR[idx].x*lat,0,P[idx].z+NR[idx].z*lat);c.h=headingAt(idx);c.lane=lat;c.laneGoal=lat;c.laneT=2+Math.random()*2;
     c.prog=idx-N;syncMesh(c);cars.push(c);
   });
@@ -1165,7 +1187,7 @@ function stepCar(c,inp,dt){
   if(boost){c.nitro=Math.max(0,c.nitro-s.drain*dt);top*=1.32;if(c.nitro===0)c.nitroEmpty=true;}
   else if(!inp.nitro)c.nitro=Math.min(1,c.nitro+s.refill*dt);
   if(c.offroad&&!(c.perkSpeed>1))top*=.5;
-  if(inp.gas){if(c.speed<top)c.speed+=s.acc*(c.perkSpeed||1)*(boost?1.9:1)*Math.max(.25,1-.6*Math.max(0,c.speed)/top)*dt;}
+  if(inp.gas){if(c.speed<top)c.speed+=s.acc*(c.perkSpeed||1)*(c.chase||1)*(boost?1.9:1)*Math.max(.25,1-.6*Math.max(0,c.speed)/top)*dt;}
   else if(inp.brake){if(c.speed>.5)c.speed-=55*dt;else c.speed=Math.max(-14,c.speed-18*dt);}
   else{const d=(5+Math.abs(c.speed)*.22)*dt;c.speed=Math.abs(c.speed)<=d?0:c.speed-Math.sign(c.speed)*d;}
   if(c.speed>top)c.speed=Math.max(top,c.speed-(c.offroad?45:20)*dt);
@@ -1184,8 +1206,13 @@ function stepCar(c,inp,dt){
   u.body.rotation.z=-c.steer*Math.min(1,av/s.top)*.07;u.body.rotation.x=(inp.brake&&c.speed>3?.03:inp.gas?-.015:0);
   for(const f of u.flames){f.visible=boost;if(boost)f.scale.set(1,1,.7+Math.random()*.6);}
 }
+function leaderProg(){let best=-1e9;for(const c of cars)if(!c.finished)best=Math.max(best,c.prog);return best;}
 function aiInput(c,dt){
-  c.laneT-=dt;if(c.laneT<0){c.laneT=2+Math.random()*3;c.laneGoal=(Math.random()*2-1)*W*.28;}
+  c.laneT-=dt;if(c.laneT<0){c.laneT=2+Math.random()*3;c.laneGoal=clamp((c.laneHome||0)+(Math.random()*2-1)*W*.12,-W*.32,W*.32);}
+  // Don't sit right behind another car in the same lane: move over to pass instead of bunching up.
+  if(!c.isPlayer){for(const o of cars){if(o===c)continue;const gap=o.prog-c.prog;
+    const side=gap>0&&gap<14?lateralOf(o.idx,o.pos.x,o.pos.z):null;
+    if(side!==null&&Math.abs(side-c.laneGoal)<3.5){c.laneGoal=clamp(side+(side>0?-6:6),-W*.32,W*.32);c.laneT=1.5;break;}}}
   const dodging=dodge(c);
   // Aim at a nearer point while dodging, so the car actually swerves instead of drifting over.
   const look=Math.floor(dodging?6+Math.max(0,c.speed)*.18:10+Math.max(0,c.speed)*.35),ti=(c.idx+look)%N;
@@ -1193,7 +1220,14 @@ function aiInput(c,dt){
   const tx=P[ti].x+NR[ti].x*c.lane,tz=P[ti].z+NR[ti].z*c.lane;
   const d=wrapA(Math.atan2(tx-c.pos.x,tz-c.pos.z)-c.h);
   let kmax=0;for(let j=5;j<=75;j+=7)kmax=Math.max(kmax,K[(c.idx+j)%N]);
-  if(!c.isPlayer){const diff=c.prog-(player?player.prog:0);c.rb=clamp(1-diff*.00045,raceClass.holdBack,raceClass.catchUp)*c.skill;}else c.rb=1;
+  if(!c.isPlayer){
+    const diff=c.prog-(player?player.prog:0);let rb=clamp(1-diff*.00045,raceClass.holdBack,raceClass.catchUp);
+    // Rubber-banding: anyone well behind 1st (you or a rival) gets more speed and pick-up to chase them down.
+    const behind=leaderProg()-c.prog;
+    c.chase=behind>20?Math.min(raceClass.catchUp,1+behind*.0006):1;
+    rb=Math.max(rb,c.chase);
+    c.rb=rb*c.skill*(c.pace||1);
+  }else c.rb=1;
   const target=c.stats.top*c.rb*(1-Math.min(.5,kmax*raceClass.corners))*(c.aiBoost>0?1.35:1);   // on nitro, keep the foot down
   const runUp=jumps.find(j=>c.idx>=j.rampStart-90&&c.idx<j.start);
   if(c.aiBoost>0)c.aiBoost-=dt;
@@ -1261,7 +1295,10 @@ function drawMini(){
   mctx.clearRect(0,0,300,300);mctx.lineJoin='round';mctx.beginPath();P.forEach((p,i)=>i?mctx.lineTo(mx(p.x),mz(p.z)):mctx.moveTo(mx(p.x),mz(p.z)));mctx.closePath();
   mctx.strokeStyle='rgba(255,255,255,.2)';mctx.lineWidth=14;mctx.stroke();mctx.strokeStyle='#5a6478';mctx.lineWidth=8;mctx.stroke();
   mctx.fillStyle='#fff';mctx.fillRect(mx(P[0].x)-5,mz(P[0].z)-5,10,10);
-  for(const c of cars){if(c.isPlayer)continue;mctx.fillStyle=c.color;mctx.beginPath();mctx.arc(mx(c.pos.x),mz(c.pos.z),7,0,7);mctx.fill();}
+  // Every racer gets a dot in their own colour, outlined so it shows on the track line.
+  const dot=(x,z,colour)=>{mctx.fillStyle=colour;mctx.strokeStyle='#000';mctx.lineWidth=2.5;mctx.beginPath();mctx.arc(mx(x),mz(z),8,0,7);mctx.fill();mctx.stroke();};
+  for(const c of cars)if(!c.isPlayer)dot(c.pos.x,c.pos.z,c.color);
+  for(const g of online.ghosts.values())dot(g.mesh.position.x,g.mesh.position.z,g.color);
   if(player){mctx.fillStyle=TOK('--accent');mctx.strokeStyle='#000';mctx.lineWidth=3;mctx.beginPath();mctx.arc(mx(player.pos.x),mz(player.pos.z),10,0,7);mctx.fill();mctx.stroke();}
 }
 function drawGraph(){
@@ -1292,14 +1329,28 @@ function updateHud(dt){
   $('hNitro').style.transform='scaleX('+player.nitro.toFixed(3)+')';$('hNitro').style.opacity=player.nitroEmpty?.35:1;
   $('speedlines').style.opacity=player.boosting?1:0;
   hudT-=dt;if(hudT>0)return;hudT=.1;
-  const ranked=rankCars();const pos=ranked.indexOf(player)+1;
-  $('hPos').innerHTML=pos+'<small>/'+cars.length+'</small>';
+  const ranked=standings();const pos=ranked.findIndex(e=>e.me)+1;
+  $('hPos').innerHTML=pos+'<small>/'+ranked.length+'</small>';
   $('hLap').textContent='Lap '+Math.min(3,player.laps+1)+'/3';
   $('hLapT').textContent=fmt(state==='countdown'?0:(player.finished?player.finishTime:raceT)-player.lapStart);
   $('hBest').textContent=fmt(player.bestLap);$('hTot').textContent=fmt(player.finished?player.finishTime:raceT);
   $('hCoins').textContent=save.coins;
-  $('hBoard').innerHTML=ranked.map((c,i)=>'<div class="'+(c.isPlayer?'me':'')+'"><span class="num">'+(i+1)+'</span><i style="background:'+c.color+'"></i>'+c.name+'</div>').join('');
+  $('hBoard').textContent='';
+  ranked.forEach((e,i)=>{const row=document.createElement('div'),num=document.createElement('span'),dot=document.createElement('i');
+    row.className=e.me?'me':'';num.className='num';num.textContent=i+1;dot.style.background=e.color;row.append(num,dot,e.name);$('hBoard').appendChild(row);});
   drawMini();
+}
+// Everyone in the race, 1st first: finishers by time, then by how far round the track they are.
+// Online, friends' cars count too (they send their progress along with their position).
+function standings(){
+  if(!online.on||!online.lobby)return rankCars().map(c=>({car:c,name:c.name,color:c.color,me:c.isPlayer,done:c.finished}));
+  const me=online.lobby.seat,list=[];
+  for(const n of online.racers){
+    const time=online.results.get(n),g=online.ghosts.get(n);
+    if(n===me)list.push({car:player,name:'You',color:player?player.color:'#fff',me:true,prog:player?player.prog:0,time,done:time!==undefined});
+    else list.push({seat:n,name:online.nameOf(n),color:g?g.color:'#94a3b8',me:false,prog:g?g.prog:-1e9,time,done:time!==undefined});
+  }
+  return list.sort((a,b)=>a.done&&b.done?a.time-b.time:a.done?-1:b.done?1:b.prog-a.prog);
 }
 function rankCars(){return[...cars].sort((a,b)=>{const fa=finishOrder.indexOf(a),fb=finishOrder.indexOf(b);if(fa>=0&&fb>=0)return fa-fb;if(fa>=0)return -1;if(fb>=0)return 1;return b.prog-a.prog;});}
 

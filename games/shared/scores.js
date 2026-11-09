@@ -112,6 +112,17 @@ const NebulaScores = (function () {
             onDone(name) { NebulaProfile.setName(name); onDone(name); } });
     }
 
+    // A username is needed before playing, so scores and lobbies always have one. On a game's own page it's
+    // asked for straight away and there's no way round it; in the arcade, the arcade asks before opening the game.
+    function requireName(onDone) {
+        NebulaProfile.ready.then(() => {
+            if ((NebulaProfile.name() || '').trim()) { if (onDone) onDone(); return; }
+            const ask = () => askName(name => { if ((name || '').trim()) { if (onDone) onDone(); } else ask(); }, ask);
+            if (document.body) ask(); else addEventListener('DOMContentLoaded', ask);
+        });
+    }
+    if (window.top === window && !window.NEBULA_ARCADE && /\/games\//.test(location.pathname)) requireName();
+
     function addStyles() {
         if (document.getElementById('scoreBoardStyles')) return;
         const css = document.createElement('style');
@@ -202,5 +213,5 @@ const NebulaScores = (function () {
         return fill;
     }
 
-    return { GAMES, poolRank, local, best, everyone, send, record, hello, askName, mount };
+    return { GAMES, poolRank, local, best, everyone, send, record, hello, askName, requireName, mount };
 })();
